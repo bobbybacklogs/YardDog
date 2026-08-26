@@ -28,7 +28,13 @@ Flags:
   --auto-approve         Approve write/shell tool calls without prompting
   --hire <name,...>      Hire temps (from local agent directories) for this run
   --skill <name,...>     Attach library skills to the job (see: yarddog skills)
-  --port <n>             Port for serve (default 4343 or $YARDDOG_PORT)`);
+  --port <n>             Port for serve (default 4343 or $YARDDOG_PORT)
+
+Getting the command:
+  Not yet published to npm — \`npx yarddog\` will 404 until it is.
+  In the repo:      bun run src/cli.ts tui
+  Global command:   bun link            (puts \`yarddog\` on PATH via ~/.bun/bin)
+  Anywhere, no Bun: bun run build        (compiles bin/yarddog, a standalone executable)`);
   process.exit(0);
 }
 

@@ -129,12 +129,23 @@ Every agent — house or temp — works under the same authority line:
 
 ## Run it
 
+Not published to npm yet — `npx yarddog` will 404. Three honest ways to get the command:
+
 ```bash
 bun install
 
-yarddog                          # OpenTUI yard floor (crew + thread + composer)
-bun src/cli.ts                   # same thing from the repo
+# 1. From the repo (always works)
+bun src/cli.ts tui                # OpenTUI yard floor (crew + thread + composer)
 
+# 2. Global `yarddog` command on PATH (via ~/.bun/bin — needs Bun installed)
+bun link
+yarddog tui                       # works from any directory, yard per directory
+
+# 3. Standalone executable — no Bun, no Node, no node_modules
+bun run build                     # compiles bin/yarddog(.exe)
+./bin/yarddog tui                 # works from any directory
+
+# Headless:
 bun src/cli.ts ask "audit the repo and fix broken imports" --auto-approve
 bun src/cli.ts ask "@spotter map the auth flow, then @mule document it"
 bun src/cli.ts crew              # roster
