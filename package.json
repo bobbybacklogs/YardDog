@@ -1,0 +1,23 @@
+{
+  "name": "yarddog",
+  "version": "0.1.0",
+  "description": "No-nonsense multi-agent orchestration harness built directly on top of ModelHitch.",
+  "type": "module",
+  "module": "./src/cli.ts",
+  "bin": {
+    "yarddog": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.28",
+    "modelhitch": "^0.14.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}
