@@ -80,7 +80,10 @@ export class Store {
   }
 
   async saveCrew(crew: AgentDef[]): Promise<void> {
-    await writeFile(path.join(this.dir, "agents.json"), JSON.stringify(crew, null, 2) + "\n", "utf8");
+    // Temps are session-scoped — they clock out when the process ends and
+    // must never leak into the persisted roster.
+    const house = crew.filter((a) => a.temp === undefined);
+    await writeFile(path.join(this.dir, "agents.json"), JSON.stringify(house, null, 2) + "\n", "utf8");
   }
 
   async saveThread(thread: Thread): Promise<void> {

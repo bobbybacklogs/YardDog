@@ -44,10 +44,18 @@ const PRESENCE_COLOR: Record<string, string> = {
   error: "#FF5E5E",
 };
 
-export async function runTui(): Promise<void> {
+export async function runTui(opts: { hires?: string[] } = {}): Promise<void> {
   // Imported lazily so headless commands don't pay the harness cost.
   const { YardDog } = await import("../core/harness");
   const dog = await YardDog.create();
+  for (const name of opts.hires ?? []) {
+    try {
+      const { def, notes } = await dog.hireTemp(name);
+      for (const note of notes) console.error(`hire note (@${def.tag}): ${note}`);
+    } catch (err) {
+      console.error(`hire failed: ${(err as Error).message}`);
+    }
+  }
 
   const renderer = await createCliRenderer({ exitOnCtrlC: true });
   const thread = dog.activeThread();
@@ -83,14 +91,18 @@ export async function runTui(): Promise<void> {
   body.add(fleetBox);
 
   function renderFleet(): void {
-    const rows = dog.agents.map((agent) => {
+    for (const agent of dog.agents) {
       const presence = dog.getPresence(agent.tag);
-      return Text({
-        content: `${PRESENCE_DOT[presence]} @${agent.tag.padEnd(9)} ${presence}`,
-        fg: PRESENCE_COLOR[presence] ?? "#cccccc",
-      });
-    });
-    for (const row of rows) fleetBox.add(row);
+      const badge = agent.temp ? "~" : " ";
+      fleetBox.add(
+        Text({
+          content: `${PRESENCE_DOT[presence]}${badge}@${agent.tag.padEnd(10)} ${presence}`,
+          fg: PRESENCE_COLOR[presence] ?? "#cccccc",
+        }),
+      );
+    }
+    fleetBox.add(Text({ content: " ", fg: "#444444" }));
+    fleetBox.add(Text({ content: " ~ = hired temp", fg: "#666666" }));
   }
 
   // Feed ------------------------------------------------------------------
@@ -123,6 +135,11 @@ export async function runTui(): Promise<void> {
           content: `  ⇄ handed off to @${msg.handoff.to} — ${msg.handoff.task}`,
           fg: "#5EB7FF",
         }),
+      );
+    }
+    if (msg.consult) {
+      nodes.push(
+        Text({ content: `  ? consulted @${msg.consult.to}: ${msg.consult.question}`, fg: "#B78AFF" }),
       );
     }
     if (msg.escalation) {
@@ -251,6 +268,15 @@ export async function runTui(): Promise<void> {
           Text({
             content: `\n  ⇄ @${event.handoff.from} handed off to @${event.handoff.to}: ${event.handoff.task}`,
             fg: "#5EB7FF",
+          }),
+        );
+        break;
+      }
+      case "consult": {
+        feed.add(
+          Text({
+            content: `\n  ? @${event.consult.from} consulted @${event.consult.to}: ${event.consult.question}`,
+            fg: "#B78AFF",
           }),
         );
         break;

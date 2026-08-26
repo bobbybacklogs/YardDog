@@ -32,6 +32,41 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 
 Edit `.yarddog/agents.json` to rewire lanes, prompts, memory, or add crew members. All agents default to the config lane; pin `provider`/`model` per agent to mix providers across the fleet.
 
+## The hiring hall
+
+Your local agent directories are a labor pool. YardDog discovers agent definitions across every supported ecosystem (via [portage-cli](https://www.npmjs.com/package/portage-cli)) and hires them as **temps** — session-scoped workers that house agents treat exactly like teammates.
+
+```bash
+yarddog temps                                  # who's available on this machine
+yarddog hire "Debug & Repair Generalist"       # inspect the hire receipt
+yarddog ask "@debug-repair-generalist fix the flaky test" --hire "Debug & Repair Generalist"
+yarddog tui --hire "Chrome Extension Reviewer,Final Validator"
+```
+
+- **Temps ride the A2A protocol for free**: once hired, they appear in every agent's team roster, so `@foreman` can `@delegate` or be consulted by them with zero configuration.
+- **Session-scoped**: temps are never written to `.yarddog/agents.json` — when the session ends, they clock out.
+- **Honest receipts**: vendor tool names (`read`, `search`, `web`, `vscode/*`) are mapped onto YardDog's real tools; anything without an equivalent is dropped and noted, never faked.
+- **Model lanes**: explicit `provider/model` pairs in a spec are honored; vendor shorthand (`inherit`, `sonnet`) rides the config's default lane.
+
+## Judgment ground rules
+
+Every agent — house or temp — works under the same authority line:
+
+**In-scope** (ask `@foreman` in-thread via `@consult(to: @foreman, question: ...)`; work continues):
+1. Work assignment and order
+2. Approach selection when multiple valid paths exist
+3. Quality bar — whether work satisfies the request
+4. Retry/reassignment of stalled work
+5. Convention calls consistent with project norms
+
+**Out-of-scope** (page the human via `@escalate(...)`; the chain stops):
+1. Irreversible actions beyond the stated job
+2. Money beyond normal key operation
+3. Secrets/auth/security-posture changes
+4. Scope changes
+5. Contradicting explicit user instructions
+6. Anything not confidently classifiable as in-scope
+
 ## Run it
 
 ```bash
@@ -65,18 +100,19 @@ Delete it for a fresh yard.
 
 ```
 src/
-├─ cli.ts               entry: tui | ask | crew | threads
+├─ cli.ts               entry: tui | ask | crew | temps | hire | fire | threads
 ├─ core/
 │  ├─ types.ts          AgentDef, ThreadMessage, events — pure JSON-safe data
 │  ├─ harness.ts        YardDog engine: one ModelHitch, crew, threads,
 │  │                    send() → agent turns → directive execution loop
-│  ├─ directives.ts     @delegate / @escalate parse + strip
-│  ├─ prompts.ts        persona ⊕ memory ⊕ team roster ⊕ teamwork protocol
+│  ├─ directives.ts     @delegate / @consult / @escalate parse + strip
+│  ├─ prompts.ts        persona ⊕ memory ⊕ team roster ⊕ ground rules
+│  ├─ hall.ts           the hiring hall: portage discovery → temp AgentDefs
 │  ├─ tools.ts          workdir-confined tool registry + approval gate
 │  ├─ store.ts          JSON persistence under .yarddog/
-│  └─ crew.ts           default freight-themed crew
+│  └─ crew.ts           default freight crew
 └─ tui/app.ts           OpenTUI yard floor
-tests/                   bun test — protocol, prompts, tools
+tests/                   bun test — protocol, prompts, tools, hiring hall
 ```
 
 ### The A2A wire protocol
@@ -85,6 +121,7 @@ Agents collaborate through plain text at the tail of a reply — no hidden chann
 
 ```
 @delegate(to: @tag, task: one sentence)
+@consult(to: @tag, question: judgment call inside the ground rules)
 @escalate(question for the human)
 ```
 

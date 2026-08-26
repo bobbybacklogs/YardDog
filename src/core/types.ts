@@ -24,12 +24,25 @@ export interface AgentDef {
   memory: string;
   /** Names of allowed tools from the built-in registry. Empty = no tools. */
   tools: string[];
+  /** Present when this worker was hired from a local agent directory. */
+  temp?: {
+    vendor: string;
+    sourcePath: string;
+    hiredAt: number;
+  };
 }
 
 export interface Handoff {
   from: string;
   to: string;
   task: string;
+}
+
+/** A judgment call routed to another agent (usually the foreman) mid-job. */
+export interface Consult {
+  from: string;
+  to: string;
+  question: string;
 }
 
 export interface Escalation {
@@ -54,6 +67,7 @@ export interface ThreadMessage {
   to?: string[];
   text: string;
   handoff?: Handoff;
+  consult?: Consult;
   escalation?: Escalation;
   ts: number;
   /** Orchestration depth this message was produced at (0 = direct reply). */
@@ -82,6 +96,7 @@ export type YardDogEvent =
     }
   | { type: "turn:end"; threadId: string; message: ThreadMessage }
   | { type: "handoff"; threadId: string; handoff: Handoff }
+  | { type: "consult"; threadId: string; consult: Consult }
   | { type: "escalate"; threadId: string; escalation: Escalation }
   | { type: "failover"; threadId?: string; agentTag?: string; detail: string }
   | { type: "error"; threadId?: string; agentTag?: string; error: string };

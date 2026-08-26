@@ -12,8 +12,10 @@ import { buildSystemPrompt, historyToMessages } from "./prompts";
 import { Store, type HarnessConfig } from "./store";
 import { TOOLS, needsApproval, type ToolContext } from "./tools";
 import { defaultCrew } from "./crew";
+import { slugifyTag, specToTempDef, tempRoots } from "./hall";
 import type {
   AgentDef,
+  Consult,
   Escalation,
   Handoff,
   Presence,
@@ -46,6 +48,9 @@ export class YardDog extends EventEmitter {
   private busy = false;
   /** Shared counter bumped by ModelHitch autoMode on every lane switch. */
   private readonly failoverCounter: { count: number };
+  /** Per-job consult budget — resets at each send(). */
+  private consultBudget = { remaining: 0 };
+  private static readonly MAX_CONSULTS_PER_JOB = 4;
 
   private constructor(
     mh: ModelHitch,
@@ -111,6 +116,47 @@ export class YardDog extends EventEmitter {
     return this.busy;
   }
 
+  // ---- The hiring hall ----------------------------------------------------
+
+  /** Temps currently on payroll this session. */
+  temps(): AgentDef[] {
+    return this.crew.filter((a) => a.temp !== undefined);
+  }
+
+  /**
+   * Hire a discovered temp by name or tag (as listed by `yarddog temps`).
+   * Session-scoped: never persisted to agents.json.
+   */
+  async hireTemp(nameOrTag: string, projectRoot?: string): Promise<{ def: AgentDef; notes: string[] }> {
+    const roots = await tempRoots(projectRoot ?? this.store.workdir);
+    const specs = await import("portage-cli").then((p) => p.discoverAgents(roots));
+    const wanted = slugifyTag(nameOrTag);
+    const spec = specs.find(
+      (s) => slugifyTag(s.name) === wanted || s.name.toLowerCase() === nameOrTag.toLowerCase(),
+    );
+    if (!spec) throw new Error(`no temp named "${nameOrTag}" in the local agent directories`);
+    if (this.agent(wanted)) throw new Error(`@${wanted} is already on the crew`);
+
+    const { def, notes } = specToTempDef(spec);
+    // Empty provider/model means "ride the config lane" — fill them so
+    // ModelHitch calls stay uniform.
+    if (!def.provider) {
+      def.provider = this.config.provider;
+      def.model = this.config.model;
+    }
+    this.crew.push(def);
+    this.presence.set(def.tag, "idle");
+    return { def, notes };
+  }
+
+  fireTemp(tag: string): boolean {
+    const idx = this.crew.findIndex((a) => a.tag === tag.toLowerCase() && a.temp !== undefined);
+    if (idx === -1) return false;
+    const [removed] = this.crew.splice(idx, 1);
+    this.presence.delete(removed!.tag);
+    return true;
+  }
+
   // ---- Threads -----------------------------------------------------------
 
   createThread(title = "New job"): Thread {
@@ -168,6 +214,7 @@ export class YardDog extends EventEmitter {
     await this.store.saveThread(thread);
 
     this.busy = true;
+    this.consultBudget.remaining = YardDog.MAX_CONSULTS_PER_JOB;
     try {
       for (const tag of responders) {
         const agent = this.agent(tag);
@@ -198,7 +245,9 @@ export class YardDog extends EventEmitter {
     threadId: string,
     depth: number,
     delegator?: string,
+    opts?: { ignoreDirectives?: boolean },
   ): Promise<ThreadMessage | undefined> {
+    const ignoreDirectives = opts?.ignoreDirectives === true;
     const thread = this.threads.get(threadId)!;
     this.setPresence(agent.tag, "working");
 
@@ -267,15 +316,61 @@ export class YardDog extends EventEmitter {
 
     meta.failedOver = this.failoverCounter.count > failoversAtStart;
 
-    // Parse the A2A directives out of the raw reply.
-    const parsed = parseReply(text, agent.tag);
-    const message = this.recordTurn(thread, agent, parsed.clean || "(no output)", depth, meta, parsed.handoff, parsed.escalation);
+    // Consult-answer turns skip directive parsing: an answer is an answer,
+    // not a delegation opportunity (keeps consult chains from compounding).
+    const parsed = ignoreDirectives
+      ? { clean: text, handoff: undefined, consult: undefined, escalation: undefined }
+      : parseReply(text, agent.tag);
+    const message = this.recordTurn(thread, agent, parsed.clean || "(no output)", depth, meta, parsed.handoff, parsed.consult, parsed.escalation);
 
     // Escalation stops the chain — human gets paged.
     if (parsed.escalation) {
       this.setPresence(agent.tag, "escalated");
       this.emitEvent({ type: "escalate", threadId, escalation: parsed.escalation });
       return message;
+    }
+
+    // Consult: ask another crew member in-thread. The answer flows back and
+    // the asker continues its job. Budget-capped per job to keep chains sane.
+    if (parsed.consult && this.consultBudget.remaining > 0) {
+      const target = this.agent(parsed.consult.to);
+      if (target && target.tag !== agent.tag) {
+        this.consultBudget.remaining--;
+        this.setPresence(agent.tag, "handoff");
+        this.emitEvent({ type: "consult", threadId, consult: parsed.consult });
+
+        const consultMsg: ThreadMessage = {
+          id: randomUUID(),
+          from: agent.tag,
+          to: [target.tag],
+          text: `? consulted @${target.tag}: ${parsed.consult.question}`,
+          consult: parsed.consult,
+          ts: Date.now(),
+          depth,
+        };
+        thread.messages.push(consultMsg);
+        await this.store.saveThread(thread);
+
+        const answerMsg = await this.runAgentTurn(
+          target,
+          `[Consult from @${agent.tag}] ${parsed.consult.question}\n\nAnswer concisely in-thread. Directives are ignored during consults — just answer.`,
+          threadId,
+          depth + 1,
+          undefined,
+          { ignoreDirectives: true },
+        );
+
+        if (answerMsg) {
+          await this.runAgentTurn(
+            agent,
+            `[Consult answer from @${target.tag}] ${answerMsg.text}\n\nContinue your job with this in mind.`,
+            threadId,
+            depth + 1,
+            delegator,
+          );
+        }
+        return message;
+      }
     }
 
     // Handoff: mechanically execute the next leg, depth-capped.
@@ -313,6 +408,7 @@ export class YardDog extends EventEmitter {
     depth: number,
     meta: TurnMeta,
     handoff?: Handoff,
+    consult?: Consult,
     escalation?: Escalation,
   ): ThreadMessage {
     const message: ThreadMessage = {
@@ -323,6 +419,7 @@ export class YardDog extends EventEmitter {
       depth,
       meta,
       ...(handoff ? { handoff } : {}),
+      ...(consult ? { consult } : {}),
       ...(escalation ? { escalation } : {}),
     };
     thread.messages.push(message);
