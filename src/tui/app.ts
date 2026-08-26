@@ -149,13 +149,26 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
     paddingLeft: 1,
     title: " give the dog a job ",
   });
-  rootCol.add(composerBox);
+
+  // Autocomplete overlay — sits between feed and composer, height 0 when idle.
+  const suggestBox = new BoxRenderable(renderer, { flexDirection: "column", height: 0 }) as unknown as {
+    add(child: unknown): void;
+    remove(child: unknown): void;
+    height: number;
+  };
+  let suggestChildren: TextRenderable[] = [];
+  const rootColForSuggest = rootCol;
+  rootColForSuggest.add(suggestBox);
+  rootColForSuggest.add(composerBox);
 
   const input = new InputRenderable(renderer, {
     placeholder: "/help for commands · job, or @mention a teammate…",
     placeholderColor: "#555555",
     textColor: "#e8e8e8",
     cursorColor: "#FFD75E",
+    // "auto" width renders the first keystroke invisible and re-lays-out as
+    // text grows — the input must claim the full row up front.
+    width: "100%",
   });
   composerBox.add(input);
 
@@ -259,7 +272,86 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
     const value = String(input.value ?? "").trim();
     if (!value) return;
     input.value = "";
+    hideSuggestions();
     void submit(value);
+  });
+
+  // ---- Autocomplete: @mentions, @directives, /commands ---------------------
+
+  const COMMANDS = ["new", "open", "threads", "hire", "fire", "skill", "skills", "help"];
+  const DIRECTIVES = ["delegate", "consult", "escalate"];
+  let activeSuggestions: string[] = [];
+
+  function currentToken(value: string): { kind: "mention" | "command"; prefix: string } | null {
+    const cmd = /^\/(\S*)$/.exec(value);
+    if (cmd) return { kind: "command", prefix: cmd[1]! };
+    const mention = /(?:^|\s)@(\S*)$/.exec(value);
+    if (mention) return { kind: "mention", prefix: mention[1]! };
+    return null;
+  }
+
+  function computeSuggestions(value: string): string[] {
+    const tok = currentToken(value);
+    if (!tok) return [];
+    const p = tok.prefix.toLowerCase();
+    if (tok.kind === "command") {
+      return COMMANDS.filter((c) => c.startsWith(p));
+    }
+    const tags = dog.agents.map((a) => a.tag);
+    return [...tags, ...DIRECTIVES].filter((t) => t.toLowerCase().startsWith(p));
+  }
+
+  function showSuggestions(items: string[]): void {
+    for (const child of suggestChildren) {
+      try {
+        suggestBox.remove(child);
+      } catch {}
+    }
+    suggestChildren = [];
+    activeSuggestions = items;
+    if (items.length === 0) {
+      suggestBox.height = 0;
+      return;
+    }
+    const shown = items.slice(0, 4);
+    for (let i = 0; i < shown.length; i++) {
+      const tok = currentToken(String(input.value ?? ""));
+      const label =
+        tok?.kind === "command"
+          ? `/${shown[i]!}`
+          : `@${shown[i]!}${DIRECTIVES.includes(shown[i]!) ? "  (directive)" : "  (crew)"}`;
+      const t = new TextRenderable(renderer, {
+        content: (i === 0 ? "▸ " : "  ") + label + (i === 0 ? "   [Tab]" : ""),
+        fg: i === 0 ? "#FFD75E" : "#888888",
+      });
+      suggestBox.add(t);
+      suggestChildren.push(t);
+    }
+    suggestBox.height = shown.length;
+  }
+
+  function hideSuggestions(): void {
+    showSuggestions([]);
+  }
+
+  input.on("input", () => {
+    showSuggestions(computeSuggestions(String(input.value ?? "")));
+  });
+
+  function acceptSuggestion(): void {
+    if (activeSuggestions.length === 0) return;
+    const pick = activeSuggestions[0]!;
+    const value = String(input.value ?? "");
+    if (/^\/\S*$/.test(value)) {
+      input.value = `/${pick} `;
+    } else {
+      input.value = value.replace(/@(\S*)$/, `@${pick} `);
+    }
+    hideSuggestions();
+  }
+
+  renderer.keyInput.on("keypress", (key: { name?: string }) => {
+    if (key.name === "tab") acceptSuggestion();
   });
 
   async function submit(text: string): Promise<void> {
@@ -356,6 +448,7 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
           "/new [title] — new thread   /open <id> — switch   /threads — list",
           "/hire <name[,name]> — hire temps   /fire <tag> — clock out temps",
           "/skill <name,...> — attach skills   /skills — list library",
+          "type @ or / for autocomplete · Tab accepts · @delegate/@consult/@escalate",
         ]) {
           feedLine(line, "#888888");
         }
