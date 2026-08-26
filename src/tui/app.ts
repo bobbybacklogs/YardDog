@@ -255,7 +255,7 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
 
   // ---- Input ----------------------------------------------------------------
 
-  input.on("submit", () => {
+  input.on("enter", () => {
     const value = String(input.value ?? "").trim();
     if (!value) return;
     input.value = "";
