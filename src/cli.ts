@@ -24,7 +24,8 @@ Usage:
 Flags:
   --workdir <path>       Operate on a project directory (default: cwd)
   --auto-approve         Approve write/shell tool calls without prompting
-  --hire <name,...>      Hire temps (from local agent directories) for this run`);
+  --hire <name,...>      Hire temps (from local agent directories) for this run
+  --skill <name,...>     Attach library skills to the job (see: yarddog skills)`);
   process.exit(0);
 }
 
@@ -34,11 +35,18 @@ interface CliArgs {
   workdir?: string;
   autoApprove: boolean;
   hires: string[];
+  skills: string[];
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { command: "tui", positional: [], autoApprove: false, hires: [] };
-  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire"]);
+  const args: CliArgs = {
+    command: "tui",
+    positional: [],
+    autoApprove: false,
+    hires: [],
+    skills: [],
+  };
+  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills"]);
   const rest = [...argv];
   let sawCommand = false;
   while (rest.length > 0) {
@@ -54,6 +62,16 @@ function parseArgs(argv: string[]): CliArgs {
         for (const name of next.split(",")) {
           const trimmed = name.trim();
           if (trimmed) args.hires.push(trimmed);
+        }
+        rest.shift();
+      }
+    } else if (arg === "--skill") {
+      // Comma-separated list: --skill a,b (repeatable)
+      const next = rest[0];
+      if (next && !next.startsWith("-")) {
+        for (const name of next.split(",")) {
+          const trimmed = name.trim();
+          if (trimmed) args.skills.push(trimmed);
         }
         rest.shift();
       }
@@ -128,6 +146,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.command === "skills") {
+    const { discoverSkillLibrary } = await import("./core/library");
+    const library = await discoverSkillLibrary(args.workdir);
+    console.log(`Skill library (${library.length} skills found on this machine):\n`);
+    for (const s of library) {
+      console.log(`  ${s.name.padEnd(40)} ${s.bodyChars} chars, ${s.companions} companion file(s)`);
+      console.log(`        ${(s.description || "(no description)").slice(0, 100)}`);
+    }
+    if (library.length === 0) console.log("  (none found)");
+    return;
+  }
+
   if (args.command === "crew") {
     const dog = await YardDog.create({ workdir: args.workdir });
     console.log("Crew roster:");
@@ -164,7 +194,7 @@ async function main(): Promise<void> {
       switch (event.type) {
         case "turn:start":
           console.log(`\n▸ @${event.agentTag} picks it up`);
-          break;
+          break;;
         case "delta":
           process.stdout.write(event.text);
           break;
@@ -196,14 +226,14 @@ async function main(): Promise<void> {
     };
 
     const thread = dog.activeThread();
-    await dog.send(thread.id, job);
+    await dog.send(thread.id, job, { skills: args.skills });
     console.log("");
     return;
   }
 
   if (args.command === "tui") {
     const { runTui } = await import("./tui/app");
-    await runTui({ hires: args.hires });
+    await runTui({ hires: args.hires, skills: args.skills });
     return;
   }
 

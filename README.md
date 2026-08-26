@@ -48,6 +48,21 @@ yarddog tui --hire "Chrome Extension Reviewer,Final Validator"
 - **Honest receipts**: vendor tool names (`read`, `search`, `web`, `vscode/*`) are mapped onto YardDog's real tools; anything without an equivalent is dropped and noted, never faked.
 - **Model lanes**: explicit `provider/model` pairs in a spec are honored; vendor shorthand (`inherit`, `sonnet`) rides the config's default lane.
 
+## The skill library
+
+Temps bring labor; skills bring know-how. YardDog discovers Agent Skills (`SKILL.md`) across local directories (via [skillswap](https://github.com/genoventures-labs/skillswap)) and attaches them **per job**:
+
+```bash
+yarddog skills                                  # what's in the local library
+yarddog ask "@mule set up crash reporting" --skill firebase-crashlytics
+yarddog tui --skill firebase-firestore,firebase-auth   # session-wide attach
+```
+
+- Skill instructions are injected into every participating agent's system prompt for that job (bodies capped at 6k chars with truncation notes).
+- Companion files are staged into `.yarddog/staged/<skill>/` inside the workdir, so agents can actually read them with their confined tools.
+- Skills referencing vendor tools get a "use your closest equivalents" note — never fake capability.
+- Attachments are recorded in the thread transcript for auditability.
+
 ## Judgment ground rules
 
 Every agent — house or temp — works under the same authority line:
@@ -100,7 +115,7 @@ Delete it for a fresh yard.
 
 ```
 src/
-├─ cli.ts               entry: tui | ask | crew | temps | hire | fire | threads
+├─ cli.ts               entry: tui | ask | crew | temps | hire | fire | threads | skills
 ├─ core/
 │  ├─ types.ts          AgentDef, ThreadMessage, events — pure JSON-safe data
 │  ├─ harness.ts        YardDog engine: one ModelHitch, crew, threads,
@@ -108,6 +123,7 @@ src/
 │  ├─ directives.ts     @delegate / @consult / @escalate parse + strip
 │  ├─ prompts.ts        persona ⊕ memory ⊕ team roster ⊕ ground rules
 │  ├─ hall.ts           the hiring hall: portage discovery → temp AgentDefs
+│  ├─ library.ts        the skill library: skillswap discovery → job-scoped injection
 │  ├─ tools.ts          workdir-confined tool registry + approval gate
 │  ├─ store.ts          JSON persistence under .yarddog/
 │  └─ crew.ts           default freight crew

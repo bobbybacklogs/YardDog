@@ -72,6 +72,8 @@ export interface ThreadMessage {
   ts: number;
   /** Orchestration depth this message was produced at (0 = direct reply). */
   depth: number;
+  /** Skill names attached to this job (user messages only). */
+  skills?: string[];
   meta?: TurnMeta;
 }
 

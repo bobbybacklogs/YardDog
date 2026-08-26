@@ -9,6 +9,7 @@
         "just-bash": "^3.4.2",
         "modelhitch": "^0.14.7",
         "portage-cli": "^0.1.4",
+        "skillswap": "^0.2.0",
         "smol-toml": "^1.8.0",
       },
       "devDependencies": {
@@ -356,6 +357,8 @@
     "simple-get": ["simple-get@4.0.1", "", { "dependencies": { "decompress-response": "^6.0.0", "once": "^1.3.1", "simple-concat": "^1.0.0" } }, "sha512-brv7p5WgH0jmQJr1ZDDfKDOSeWWg+OVypG99A/5vYGPqJ6pxiaHLy8nxtFjBA7oMa01ebA9gfh1uMCFqOuXxvA=="],
 
     "simple-xml-to-json": ["simple-xml-to-json@1.2.7", "", {}, "sha512-mz9VXphOxQWX3eQ/uXCtm6upltoN0DLx8Zb5T4TFC4FHB7S9FDPGre8CfLWqPWQQH/GrQYd2AXhhVM5LDpYx6Q=="],
+
+    "skillswap": ["skillswap@0.2.0", "", { "dependencies": { "@inquirer/prompts": "^8.5.2", "commander": "^15.0.0", "picocolors": "^1.1.1", "yaml": "^2.9.0" }, "bin": { "skillswap": "dist/cli.js", "sp": "dist/cli.js" } }, "sha512-0XUJ66Ky6vXVKAUCn6wsFMng60akfLcxxLnH21nacNjBEZORG23S3EZY9QOqGG1VbwmCTiSk5drYViuUVvSR8A=="],
 
     "smol-toml": ["smol-toml@1.8.0", "", {}, "sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ=="],
 

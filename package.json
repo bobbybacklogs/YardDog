@@ -17,6 +17,7 @@
     "just-bash": "^3.4.2",
     "modelhitch": "^0.14.7",
     "portage-cli": "^0.1.4",
+    "skillswap": "^0.2.0",
     "smol-toml": "^1.8.0"
   },
   "overrides": {

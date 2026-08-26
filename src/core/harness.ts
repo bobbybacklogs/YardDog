@@ -13,6 +13,7 @@ import { Store, type HarnessConfig } from "./store";
 import { TOOLS, needsApproval, type ToolContext } from "./tools";
 import { defaultCrew } from "./crew";
 import { slugifyTag, specToTempDef, tempRoots } from "./hall";
+import { prepareSkills } from "./library";
 import type {
   AgentDef,
   Consult,
@@ -51,6 +52,8 @@ export class YardDog extends EventEmitter {
   /** Per-job consult budget — resets at each send(). */
   private consultBudget = { remaining: 0 };
   private static readonly MAX_CONSULTS_PER_JOB = 4;
+  /** Prompt injection for the job's attached skills; set during send(). */
+  private activeSkillInjection = "";
 
   private constructor(
     mh: ModelHitch,
@@ -191,12 +194,22 @@ export class YardDog extends EventEmitter {
    * Post a user message to a thread and run the crew.
    * Routing: explicit @mentions win; otherwise the first crew member
    * (the foreman by default) takes it.
+   * `opts.skills` attaches library skills to this job — their instructions
+   * are injected into every participating agent's system prompt.
    * Returns once the whole orchestration chain settles.
    */
-  async send(threadId: string, text: string): Promise<void> {
+  async send(
+    threadId: string,
+    text: string,
+    opts?: { skills?: string[] },
+  ): Promise<void> {
     const thread = this.threads.get(threadId);
     if (!thread) throw new Error(`unknown thread: ${threadId}`);
     if (this.busy) throw new Error("yard is busy — one job at a time (v1)");
+
+    // Resolve + stage skills up front so a bad name fails before any work.
+    const skillNames = opts?.skills ?? [];
+    const { injection } = await prepareSkills(skillNames, this.store.workdir);
 
     const mentioned = this.resolveMentions(text);
     const responders = mentioned.length > 0 ? mentioned : [this.crew[0]!.tag];
@@ -208,12 +221,14 @@ export class YardDog extends EventEmitter {
       text,
       ts: Date.now(),
       depth: 0,
+      ...(skillNames.length > 0 ? { skills: skillNames } : {}),
     };
     thread.messages.push(userMsg);
     thread.updatedAt = Date.now();
     await this.store.saveThread(thread);
 
     this.busy = true;
+    this.activeSkillInjection = injection;
     this.consultBudget.remaining = YardDog.MAX_CONSULTS_PER_JOB;
     try {
       for (const tag of responders) {
@@ -223,6 +238,7 @@ export class YardDog extends EventEmitter {
       }
     } finally {
       this.busy = false;
+      this.activeSkillInjection = "";
       for (const a of this.crew) {
         if (this.getPresence(a.tag) !== "escalated") this.setPresence(a.tag, "idle");
       }
@@ -253,8 +269,14 @@ export class YardDog extends EventEmitter {
 
     // History snapshot excludes the input we're about to send; the caller
     // already appended user/handoff messages before invoking us.
+    const systemPrompt = buildSystemPrompt(agent, this.crew, delegator);
     const messages: ModelMessage[] = [
-      { role: "system", content: buildSystemPrompt(agent, this.crew, delegator) },
+      {
+        role: "system",
+        content: this.activeSkillInjection
+          ? `${systemPrompt}\n\n${this.activeSkillInjection}`
+          : systemPrompt,
+      },
       ...historyToMessages(thread.messages, agent.tag),
       { role: "user", content: input },
     ];

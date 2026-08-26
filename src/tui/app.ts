@@ -44,7 +44,7 @@ const PRESENCE_COLOR: Record<string, string> = {
   error: "#FF5E5E",
 };
 
-export async function runTui(opts: { hires?: string[] } = {}): Promise<void> {
+export async function runTui(opts: { hires?: string[]; skills?: string[] } = {}): Promise<void> {
   // Imported lazily so headless commands don't pay the harness cost.
   const { YardDog } = await import("../core/harness");
   const dog = await YardDog.create();
@@ -56,6 +56,8 @@ export async function runTui(opts: { hires?: string[] } = {}): Promise<void> {
       console.error(`hire failed: ${(err as Error).message}`);
     }
   }
+  // Skills are job-scoped; the TUI keeps a persistent attach list for the session.
+  const skillNames = [...(opts.skills ?? [])];
 
   const renderer = await createCliRenderer({ exitOnCtrlC: true });
   const thread = dog.activeThread();
@@ -212,7 +214,7 @@ export async function runTui(opts: { hires?: string[] } = {}): Promise<void> {
 
   async function submit(text: string): Promise<void> {
     try {
-      await dog.send(thread.id, text);
+      await dog.send(thread.id, text, { skills: skillNames });
     } catch (err) {
       feed.add(Text({ content: `✗ ${(err as Error).message}`, fg: "#FF5E5E" }));
     }
@@ -313,7 +315,11 @@ export async function runTui(opts: { hires?: string[] } = {}): Promise<void> {
 
   renderFleet();
   renderFeed();
-  updateStatus("idle");
+  updateStatus(
+    skillNames.length > 0
+      ? `idle · skills attached: ${skillNames.join(", ")}`
+      : "idle",
+  );
   input.focus();
 
   await new Promise<never>(() => {
