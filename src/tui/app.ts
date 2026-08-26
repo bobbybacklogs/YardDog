@@ -60,20 +60,23 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
   const skillNames = [...(opts.skills ?? [])];
 
   const renderer = await createCliRenderer({ exitOnCtrlC: true });
-  const thread = dog.activeThread();
+  let thread = dog.activeThread();
 
   const root = Box({ flexDirection: "column", flexGrow: 1 });
   renderer.root.add(root);
 
-  // ---- Header -----------------------------------------------------------
+  // ---- Header (rebuilt on thread switch) ----------------------------------
 
-  root.add(
-    Box(
-      { flexDirection: "row", gap: 2, paddingLeft: 1, height: 1 },
-      Text({ content: "YARDDOG", fg: "#FFD75E" }),
-      Text({ content: thread.title, fg: "#888888" }),
-    ),
-  );
+  const headerBox = Box({ flexDirection: "row", gap: 2, paddingLeft: 1, height: 1 }) as unknown as Container;
+  root.add(headerBox);
+
+  function renderHeader(): void {
+    headerBox.add(Text({ content: "YARDDOG", fg: "#FFD75E" }));
+    headerBox.add(Text({ content: `${thread.id} — ${thread.title}`, fg: "#888888" }));
+    if (skillNames.length > 0) {
+      headerBox.add(Text({ content: `skills: ${skillNames.join(", ")}`, fg: "#B78AFF" }));
+    }
+  }
 
   // ---- Body -------------------------------------------------------------
 
@@ -197,7 +200,7 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
   root.add(composerRow);
 
   const input = Input({
-    placeholder: "Describe the job, or @mention a teammate… (Enter to send)",
+    placeholder: "/help for commands · job, or @mention a teammate… (Enter)",
     placeholderColor: "#555555",
     backgroundColor: "#101010",
     textColor: "#e8e8e8",
@@ -207,16 +210,120 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
 
   input.on("enter", () => {
     const value = String((input as unknown as { value: string }).value ?? "").trim();
-    if (!value || dog.working) return;
+    if (!value) return;
     (input as unknown as { value: string }).value = "";
     void submit(value);
   });
 
   async function submit(text: string): Promise<void> {
+    if (text.startsWith("/")) {
+      await handleCommand(text);
+      return;
+    }
     try {
       await dog.send(thread.id, text, { skills: skillNames });
     } catch (err) {
       feed.add(Text({ content: `✗ ${(err as Error).message}`, fg: "#FF5E5E" }));
+    }
+  }
+
+  // ---- Slash commands -----------------------------------------------------
+
+  async function handleCommand(raw: string): Promise<void> {
+    const [cmd, ...rest] = raw.slice(1).split(/\s+/);
+    const argsLine = raw.slice(1 + cmd!.length).trim();
+
+    switch (cmd) {
+      case "new": {
+        thread = dog.createThread(argsLine || "New job");
+        renderHeader();
+        renderFeed();
+        updateStatus(`switched to ${thread.id}`);
+        break;
+      }
+      case "open": {
+        const target = dog.getThread(argsLine.trim());
+        if (!target) {
+          feed.add(Text({ content: `✗ no thread "${argsLine.trim()}"`, fg: "#FF5E5E" }));
+          break;
+        }
+        thread = target;
+        renderHeader();
+        renderFeed();
+        updateStatus(`switched to ${thread.id}`);
+        break;
+      }
+      case "threads": {
+        for (const t of dog.listThreads()) {
+          feed.add(
+            Text({
+              content: `${t.id}  ${t.title}  (${t.messages.length} msgs)${t.id === thread.id ? " ←" : ""}`,
+              fg: t.id === thread.id ? "#FFD75E" : "#888888",
+            }),
+          );
+        }
+        break;
+      }
+      case "hire": {
+        for (const name of argsLine.split(",").map((s) => s.trim()).filter(Boolean)) {
+          try {
+            const { def, notes } = await dog.hireTemp(name);
+            feed.add(Text({ content: `+ hired @${def.tag} (${def.temp?.vendor})`, fg: "#5EFF8B" }));
+            for (const note of notes) {
+              feed.add(Text({ content: `    note: ${note}`, fg: "#666666" }));
+            }
+          } catch (err) {
+            feed.add(Text({ content: `✗ hire failed: ${(err as Error).message}`, fg: "#FF5E5E" }));
+          }
+        }
+        renderFleet();
+        break;
+      }
+      case "fire": {
+        for (const tag of argsLine.split(",").map((s) => s.trim()).filter(Boolean)) {
+          feed.add(
+            Text({
+              content: dog.fireTemp(tag) ? `- fired @${tag.toLowerCase()}` : `@${tag.toLowerCase()} is not on payroll`,
+              fg: dog.fireTemp(tag) ? "#FFD75E" : "#FF5E5E",
+            }),
+          );
+        }
+        renderFleet();
+        break;
+      }
+      case "skill": {
+        skillNames.length = 0;
+        for (const name of argsLine.split(",").map((s) => s.trim()).filter(Boolean)) {
+          skillNames.push(name);
+        }
+        renderHeader();
+        feed.add(
+          Text({
+            content: skillNames.length > 0 ? `skills attached: ${skillNames.join(", ")}` : "skills cleared",
+            fg: "#B78AFF",
+          }),
+        );
+        break;
+      }
+      case "skills": {
+        const { discoverSkillLibrary } = await import("../core/library");
+        for (const s of await discoverSkillLibrary()) {
+          feed.add(Text({ content: `  ${s.name.padEnd(38)} ${(s.description || "").slice(0, 70)}`, fg: "#888888" }));
+        }
+        break;
+      }
+      case "help": {
+        for (const line of [
+          "/new [title] — new thread   /open <id> — switch   /threads — list",
+          "/hire <name[,name]> — hire temps   /fire <tag> — clock out temps",
+          "/skill <name,...> — attach skills   /skills — list library",
+        ]) {
+          feed.add(Text({ content: line, fg: "#888888" }));
+        }
+        break;
+      }
+      default:
+        feed.add(Text({ content: `✗ unknown command "/${cmd}" — try /help`, fg: "#FF5E5E" }));
     }
   }
 
@@ -313,6 +420,7 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
 
   // ---- Go ----------------------------------------------------------------
 
+  renderHeader();
   renderFleet();
   renderFeed();
   updateStatus(

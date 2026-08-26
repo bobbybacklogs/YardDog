@@ -57,6 +57,9 @@ export class YardDog extends EventEmitter {
   private activeSkillInjection = "";
   /** Per-agent sandboxed computers, created on first shell use. */
   private computers: Map<string, Computer> = new Map();
+  /** FIFO job queue: tail promise chains jobs so they never overlap. */
+  private jobQueueTail: Promise<void> = Promise.resolve();
+  private queuedJobs = 0;
 
   private constructor(
     mh: ModelHitch,
@@ -199,7 +202,8 @@ export class YardDog extends EventEmitter {
    * (the foreman by default) takes it.
    * `opts.skills` attaches library skills to this job — their instructions
    * are injected into every participating agent's system prompt.
-   * Returns once the whole orchestration chain settles.
+   * Jobs are FIFO-queued: send() resolves when ITS job completes, even if
+   * other jobs are still ahead of it.
    */
   async send(
     threadId: string,
@@ -208,12 +212,35 @@ export class YardDog extends EventEmitter {
   ): Promise<void> {
     const thread = this.threads.get(threadId);
     if (!thread) throw new Error(`unknown thread: ${threadId}`);
-    if (this.busy) throw new Error("yard is busy — one job at a time (v1)");
 
-    // Resolve + stage skills up front so a bad name fails before any work.
+    // Resolve + stage skills up front so a bad name fails before queueing.
     const skillNames = opts?.skills ?? [];
     const { injection } = await prepareSkills(skillNames, this.store.workdir);
 
+    this.queuedJobs++;
+    const run = this.jobQueueTail.then(() =>
+      this.runJob(thread, text, injection, skillNames),
+    );
+    this.jobQueueTail = run.catch(() => {
+      /* keep the queue chain alive; the caller's promise still rejects */
+    });
+    void run.finally(() => {
+      this.queuedJobs--;
+    });
+    return run;
+  }
+
+  get pending(): number {
+    return this.queuedJobs;
+  }
+
+  /** One job's full execution: transcript entry → responders → orchestration. */
+  private async runJob(
+    thread: Thread,
+    text: string,
+    injection: string,
+    skillNames: string[],
+  ): Promise<void> {
     const mentioned = this.resolveMentions(text);
     const responders = mentioned.length > 0 ? mentioned : [this.crew[0]!.tag];
 
