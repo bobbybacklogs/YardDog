@@ -8,7 +8,7 @@
         "@modelcontextprotocol/sdk": "^1.30.0",
         "@opentui/core": "^0.1.28",
         "just-bash": "^3.4.2",
-        "modelhitch": "^0.14.7",
+        "modelhitch": "^0.15.0",
         "portage-cli": "^0.1.4",
         "skillswap": "^0.2.0",
         "smol-toml": "^1.8.0",
@@ -383,7 +383,7 @@
 
     "mkdirp-classic": ["mkdirp-classic@0.5.3", "", {}, "sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A=="],
 
-    "modelhitch": ["modelhitch@0.14.7", "", { "dependencies": { "@opentui/core": "^0.5.6", "mdev-sdk": "^0.1.0" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"], "bin": { "modelhitch": "dist/cli.js" } }, "sha512-7cf4g+JqBMy3B5EdVbo+Etnq0VolhTA5NmyrtkpYrTBYoQPZjgzCZrTX5U5Oz6wI8GpCaWsSbTfep3mfeS2siQ=="],
+    "modelhitch": ["modelhitch@0.15.0", "", { "dependencies": { "@opentui/core": "^0.5.6", "mdev-sdk": "^0.1.0" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"], "bin": { "modelhitch": "dist/cli.js" } }, "sha512-gRIbqhdfYJAts/yQ8CdKQaN57RT9uDgkW6VVuODWMx77A3VWlN8vVSPAnB1NaH1UW4xpHeGU8L3tLA86h4f/mQ=="],
 
     "modern-tar": ["modern-tar@0.7.7", "", {}, "sha512-t9VmxaqrmANnEOBhpSDI6HD192Ge48k8vmWqQQL7hSFEqHEYwZbbsu49+aKLWZeRvFs3j1pMhXOqqF4kPlvjkQ=="],
 

@@ -43,6 +43,59 @@ describe("ModelHitch routing ownership", () => {
     expect(yardDogConfig).not.toHaveProperty("model");
   });
 
+  test("ModelHitch skips a tool-incapable primary for YardDog agent turns", async () => {
+    let incapableCalls = 0;
+    let capableCalls = 0;
+    const incapable: Provider = {
+      id: "no-tools",
+      name: "No tools",
+      defaultModel: "no-tools-model",
+      capabilities: { streaming: true, toolCalling: false, vision: false, embeddings: false },
+      async chat(): Promise<ChatResult> {
+        incapableCalls++;
+        return { message: { role: "assistant", content: "wrong lane" }, finishReason: "stop" };
+      },
+      async *stream(): AsyncGenerator<StreamChunk> {
+        incapableCalls++;
+        yield { type: "text-delta", text: "wrong lane" };
+        yield { type: "finish", finishReason: "stop" };
+      },
+    };
+    const capable: Provider = {
+      id: "has-tools",
+      name: "Has tools",
+      defaultModel: "has-tools-model",
+      capabilities: { streaming: true, toolCalling: true, vision: false, embeddings: false },
+      async chat(): Promise<ChatResult> {
+        capableCalls++;
+        return { message: { role: "assistant", content: "capable lane" }, finishReason: "stop" };
+      },
+      async *stream(): AsyncGenerator<StreamChunk> {
+        capableCalls++;
+        yield { type: "text-delta", text: "capable lane" };
+        yield { type: "finish", finishReason: "stop" };
+      },
+    };
+    const workdir = path.join(import.meta.dir, ".tmp-capability-routing");
+    await rm(workdir, { recursive: true, force: true });
+    await mkdir(workdir, { recursive: true });
+    const dog = await YardDog.create({
+      workdir,
+      modelHitch: new ModelHitch({
+        providers: [incapable, capable],
+        defaultProviderId: incapable.id,
+        autoMode: { lanes: [{ providerId: capable.id, model: capable.defaultModel }] },
+      }),
+    });
+    const thread = dog.createThread("capability routing test");
+
+    await dog.send(thread.id, "use the capable lane");
+
+    expect(incapableCalls).toBe(0);
+    expect(capableCalls).toBe(1);
+    expect(thread.messages.some((message) => message.text === "capable lane")).toBe(true);
+  });
+
   test("legacy YardDog lane fields are removed from persisted state", async () => {
     const workdir = path.join(import.meta.dir, ".tmp-routing-migration");
     const yardDogDir = path.join(workdir, ".yarddog");

@@ -130,7 +130,6 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
 
   const feed = new TrackedBox(
     new ScrollBoxRenderable(renderer, {
-      flexDirection: "column",
       flexGrow: 1,
       borderStyle: "single",
       borderColor: "#444444",

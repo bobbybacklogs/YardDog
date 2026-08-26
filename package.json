@@ -26,7 +26,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "^0.1.28",
     "just-bash": "^3.4.2",
-    "modelhitch": "^0.14.7",
+    "modelhitch": "^0.15.0",
     "portage-cli": "^0.1.4",
     "skillswap": "^0.2.0",
     "smol-toml": "^1.8.0"

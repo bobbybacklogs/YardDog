@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BoxRenderable, InputRenderable, TextRenderable } from "@opentui/core";
+import { BoxRenderable, InputRenderable, ScrollBoxRenderable, TextRenderable } from "@opentui/core";
 import { KeyCodes, createTestRenderer } from "@opentui/core/testing";
 
 /**
@@ -100,6 +100,47 @@ describe("input wiring", () => {
       await setup.mockInput.pressKey(KeyCodes.TAB);
       await setup.renderOnce();
       expect(input.value).toBe("ask @wrecker ");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+});
+
+describe("conversation layout", () => {
+  test("long transcripts keep the scroll viewport at full feed height", async () => {
+    const setup = await createTestRenderer({ width: 150, height: 42 });
+    try {
+      const root = new BoxRenderable(setup.renderer, { flexDirection: "column", flexGrow: 1 });
+      setup.renderer.root.add(root);
+      root.add(new BoxRenderable(setup.renderer, { height: 1 }));
+
+      const body = new BoxRenderable(setup.renderer, { flexDirection: "row", flexGrow: 1 });
+      root.add(body);
+      body.add(new BoxRenderable(setup.renderer, { width: 30, borderStyle: "single" }));
+      const feed = new ScrollBoxRenderable(setup.renderer, {
+        flexGrow: 1,
+        borderStyle: "single",
+        paddingLeft: 1,
+        paddingRight: 1,
+        stickyScroll: true,
+      });
+      body.add(feed);
+
+      root.add(new BoxRenderable(setup.renderer, { height: 3, borderStyle: "rounded" }));
+      root.add(new TextRenderable(setup.renderer, { content: "idle" }));
+      for (let i = 0; i < 40; i++) {
+        feed.add(
+          new TextRenderable(setup.renderer, {
+            content: `${i}: ${"framework details ".repeat((i % 4) + 1)}`,
+          }),
+        );
+      }
+
+      await setup.renderOnce();
+
+      expect(feed.content.height).toBeGreaterThan(feed.viewport.height);
+      expect(feed.viewport.height).toBeGreaterThanOrEqual(feed.height - 3);
+      expect(feed.verticalScrollBar.height).toBe(feed.wrapper.height);
     } finally {
       setup.renderer.destroy();
     }
