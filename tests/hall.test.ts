@@ -9,7 +9,7 @@ describe("consult directive", () => {
     const out = parseReply(raw, "wrecker");
     expect(out.clean).toBe("Need a call here.");
     expect(out.consult).toEqual({ from: "wrecker", to: "foreman", question: "pg or sqlite?" });
-    expect(out.handoff).toBeUndefined();
+    expect(out.handoffs).toEqual([]);
     expect(out.escalation).toBeUndefined();
   });
 
@@ -31,7 +31,7 @@ describe("consult directive", () => {
       "@consult(to: @foreman, question: ok?)",
     ].join("\n");
     const out = parseReply(raw, "wrecker");
-    expect(out.handoff?.to).toBe("spotter");
+    expect(out.handoffs[0]?.to).toBe("spotter");
     expect(out.consult?.to).toBe("foreman");
   });
 });

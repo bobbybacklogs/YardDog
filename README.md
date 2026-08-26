@@ -150,6 +150,10 @@ src/
 tests/                   bun test — protocol, prompts, tools, hiring hall
 ```
 
+### Parallel dispatch
+
+The foreman doesn't have to babysit one job at a time. A reply can carry up to **three `@delegate` directives**, and sibling handoffs execute **concurrently** — `@wrecker` fixing imports while `@mule` updates docs in the same breath. Multiple `@mentions` in a user message also fan out in parallel. Consults stay sequential by nature (ask → answer → continue); escalations still stop everything.
+
 ### The A2A wire protocol
 
 Agents collaborate through plain text at the tail of a reply — no hidden channels, fully auditable in the transcript:

@@ -234,11 +234,15 @@ export class YardDog extends EventEmitter {
     this.activeSkillInjection = injection;
     this.consultBudget.remaining = YardDog.MAX_CONSULTS_PER_JOB;
     try {
-      for (const tag of responders) {
-        const agent = this.agent(tag);
-        if (!agent) continue;
-        await this.runAgentTurn(agent, `[from user] ${text}`, thread.id, 0);
-      }
+      // Multiple @mentions fan out in parallel — each mentioned agent takes
+      // the job simultaneously (Grok Bot: many bots, one thread).
+      await Promise.all(
+        responders.map((tag) => {
+          const agent = this.agent(tag);
+          if (!agent) return Promise.resolve();
+          return this.runAgentTurn(agent, `[from user] ${text}`, thread.id, 0);
+        }),
+      );
     } finally {
       this.busy = false;
       this.activeSkillInjection = "";
@@ -350,9 +354,9 @@ export class YardDog extends EventEmitter {
     // Consult-answer turns skip directive parsing: an answer is an answer,
     // not a delegation opportunity (keeps consult chains from compounding).
     const parsed = ignoreDirectives
-      ? { clean: text, handoff: undefined, consult: undefined, escalation: undefined }
+      ? { clean: text, handoffs: [] as Handoff[], consult: undefined, escalation: undefined }
       : parseReply(text, agent.tag);
-    const message = this.recordTurn(thread, agent, parsed.clean || "(no output)", depth, meta, parsed.handoff, parsed.consult, parsed.escalation);
+    const message = this.recordTurn(thread, agent, parsed.clean || "(no output)", depth, meta, parsed.handoffs, parsed.consult, parsed.escalation);
 
     // Escalation stops the chain — human gets paged.
     if (parsed.escalation) {
@@ -404,29 +408,46 @@ export class YardDog extends EventEmitter {
       }
     }
 
-    // Handoff: mechanically execute the next leg, depth-capped.
-    if (parsed.handoff && depth < this.config.maxDepth) {
-      const next = this.agent(parsed.handoff.to);
-      if (!next || next.tag === agent.tag) {
-        this.setPresence(agent.tag, "idle");
-        return message;
-      }
+    // Handoffs: mechanically execute the next legs — siblings in PARALLEL,
+    // depth-capped. The no-return rule still applies per leg.
+    if (parsed.handoffs.length > 0 && depth < this.config.maxDepth) {
       this.setPresence(agent.tag, "handoff");
-      this.setPresence(next.tag, "working");
-      this.emitEvent({ type: "handoff", threadId, handoff: parsed.handoff });
 
-      const handoffMsg: ThreadMessage = {
-        id: randomUUID(),
-        from: agent.tag,
-        to: [next.tag],
-        text: `→ handed off to @${next.tag}: ${parsed.handoff.task}`,
-        handoff: parsed.handoff,
-        ts: Date.now(),
-        depth,
-      };
-      thread.messages.push(handoffMsg);
+      const valid = parsed.handoffs
+        .map((h) => ({ h, next: this.agent(h.to) }))
+        .filter(
+          (x): x is { h: Handoff; next: AgentDef } =>
+            x.next !== undefined && x.next.tag !== agent.tag && x.h.to !== delegator?.toLowerCase(),
+        );
 
-      await this.runAgentTurn(next, `[Handed off by @${agent.tag}] ${parsed.handoff.task}`, threadId, depth + 1, agent.tag);
+      if (valid.length > 0) {
+        for (const { h } of valid) this.emitEvent({ type: "handoff", threadId, handoff: h });
+        thread.messages.push({
+          id: randomUUID(),
+          from: agent.tag,
+          to: valid.map((v) => v.h.to),
+          text:
+            valid.length === 1
+              ? `→ handed off to @${valid[0]!.h.to}: ${valid[0]!.h.task}`
+              : `→ handed off to ${valid.length} teammates in parallel:\n` +
+                valid.map((v) => `  • @${v.h.to}: ${v.h.task}`).join("\n"),
+          handoffs: valid.map((v) => v.h),
+          ts: Date.now(),
+          depth,
+        });
+
+        await Promise.all(
+          valid.map(({ h, next }) =>
+            this.runAgentTurn(
+              next,
+              `[Handed off by @${agent.tag}] ${h.task}`,
+              threadId,
+              depth + 1,
+              agent.tag,
+            ),
+          ),
+        );
+      }
     }
 
     return message;
@@ -438,7 +459,7 @@ export class YardDog extends EventEmitter {
     text: string,
     depth: number,
     meta: TurnMeta,
-    handoff?: Handoff,
+    handoffs?: Handoff[],
     consult?: Consult,
     escalation?: Escalation,
   ): ThreadMessage {
@@ -449,7 +470,7 @@ export class YardDog extends EventEmitter {
       ts: Date.now(),
       depth,
       meta,
-      ...(handoff ? { handoff } : {}),
+      ...(handoffs && handoffs.length > 0 ? { handoffs } : {}),
       ...(consult ? { consult } : {}),
       ...(escalation ? { escalation } : {}),
     };

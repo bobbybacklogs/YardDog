@@ -131,10 +131,10 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
       ) as unknown as TextNode,
       Text({ content: msg.text, fg: isUser ? "#e8e8e8" : "#c8c8c8" }),
     ];
-    if (msg.handoff) {
+    for (const h of msg.handoffs ?? []) {
       nodes.push(
         Text({
-          content: `  ⇄ handed off to @${msg.handoff.to} — ${msg.handoff.task}`,
+          content: `  ⇄ handed off to @${h.to} — ${h.task}`,
           fg: "#5EB7FF",
         }),
       );

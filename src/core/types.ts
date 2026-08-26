@@ -66,7 +66,8 @@ export interface ThreadMessage {
   /** Agent tags addressed by @mention, when known. */
   to?: string[];
   text: string;
-  handoff?: Handoff;
+  /** Handoffs emitted by this message (usually 0 or 1; up to 3 with parallels). */
+  handoffs?: Handoff[];
   consult?: Consult;
   escalation?: Escalation;
   ts: number;
