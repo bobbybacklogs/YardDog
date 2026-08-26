@@ -137,3 +137,6 @@ dist
 
 # YardDog runtime state (crew, threads, config)
 .yarddog/
+
+# Test scratch dirs
+tests/.tmp-*
