@@ -52,6 +52,7 @@ export function slugifyTag(name: string): string {
 export function mapTools(vendorTools: string[] | undefined): { tools: string[]; dropped: string[] } {
   if (!vendorTools || vendorTools.length === 0) return { tools: [], dropped: [] };
   const MAP: Record<string, string> = {
+    // Copilot / generic verbs
     read: "read_file",
     search: "grep",
     edit: "write_file",
@@ -59,13 +60,26 @@ export function mapTools(vendorTools: string[] | undefined): { tools: string[]; 
     "execute/runinterminal": "shell",
     "execute/getterminaloutput": "shell",
     list: "list_files",
+    // Claude Code canonical names
+    read_file: "read_file",
+    write: "write_file",
+    write_file: "write_file",
+    bash: "shell",
+    glob: "list_files",
+    grep: "grep",
+    // Codex-style patching is just file writing at our level
+    apply_patch: "write_file",
   };
   const tools = new Set<string>();
   const dropped: string[] = [];
   for (const raw of vendorTools) {
-    const mapped = MAP[raw.toLowerCase()];
+    const key = raw.toLowerCase();
+    const mapped = MAP[key];
     if (mapped && TOOLS[mapped]) {
       tools.add(mapped);
+    } else if (key === "agent" || key === "task") {
+      // Platform sub-delegation maps onto YardDog's native @delegate protocol.
+      dropped.push(`${raw} (use @delegate instead)`);
     } else {
       dropped.push(raw);
     }

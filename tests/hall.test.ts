@@ -49,10 +49,22 @@ describe("slugifyTag", () => {
 });
 
 describe("mapTools", () => {
-  test("maps vendor names onto yarddog tools", () => {
+  test("maps copilot verbs onto yarddog tools", () => {
     const { tools, dropped } = mapTools(["read", "search", "edit", "execute"]);
     expect(tools.sort()).toEqual(["grep", "read_file", "shell", "write_file"]);
     expect(dropped).toEqual([]);
+  });
+
+  test("maps claude-code canonical names", () => {
+    const { tools, dropped } = mapTools(["Read", "Write", "Edit", "Bash", "Grep", "Glob"]);
+    expect(tools.sort()).toEqual(["grep", "list_files", "read_file", "shell", "write_file"]);
+    expect(dropped).toEqual([]);
+  });
+
+  test("platform sub-delegation tools point at @delegate protocol", () => {
+    const { tools, dropped } = mapTools(["agent", "Task"]);
+    expect(tools).toEqual([]);
+    expect(dropped.join(" ")).toContain("@delegate");
   });
   test("drops unknown vendor tools with receipt", () => {
     const { tools, dropped } = mapTools(["read", "web", "browser", "todos", "vscode/askQuestions"]);

@@ -334,6 +334,16 @@ export class YardDog extends EventEmitter {
         remember: (mode, note) => this.writeMemory(agent, mode, note),
       };
 
+      // Capability gate: a lane without tool calling gets a plain turn plus a
+      // note, instead of an opaque provider error.
+      let toolCalling = true;
+      try {
+        toolCalling = this.mh.capabilities(agent.provider).toolCalling;
+      } catch {
+        // unknown provider id — let the natural call surface the real error
+      }
+      if (!toolCalling) specs.length = 0;
+
       if (specs.length === 0) {
         // Plain streaming turn — no tools to wrangle. autoMode fails over
         // transparently before the first chunk, so we just count switches.
