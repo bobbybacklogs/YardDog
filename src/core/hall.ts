@@ -89,6 +89,8 @@ export function specToTempDef(spec: AgentSpec): HireResult {
   }
 
   const { tools, dropped } = mapTools(spec.tools);
+  // Every temp gets a memory tool — session-scoped like the rest of them.
+  if (!tools.includes("remember")) tools.push("remember");
   if (dropped.length > 0) {
     notes.push(`no yarddog equivalent for tools: ${dropped.join(", ")}`);
   }

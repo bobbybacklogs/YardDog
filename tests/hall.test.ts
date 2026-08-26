@@ -81,7 +81,8 @@ describe("specToTempDef", () => {
     const { def, notes } = specToTempDef(fakeSpec({ tools: ["read", "search", "web"] }));
     expect(def.tag).toBe("test-temp");
     expect(def.systemPrompt).toContain("test temp");
-    expect(def.tools.sort()).toEqual(["grep", "read_file"]);
+    // remember is granted to every temp automatically
+    expect(def.tools.sort()).toEqual(["grep", "read_file", "remember"]);
     expect(def.temp?.vendor).toBe("copilot");
     expect(def.memory).toBe("");
     expect(notes.join("\n")).toContain("no yarddog equivalent for tools: web");

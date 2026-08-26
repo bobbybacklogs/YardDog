@@ -25,7 +25,7 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
       provider,
       model,
       memory: "",
-      tools: [],
+      tools: ["remember"],
     },
     {
       id: "wrecker",
@@ -41,7 +41,7 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
       provider,
       model,
       memory: "",
-      tools: ["read_file", "write_file", "list_files", "grep", "run_shell", "shell"],
+      tools: ["read_file", "write_file", "list_files", "grep", "run_shell", "shell", "remember"],
     },
     {
       id: "spotter",
@@ -57,7 +57,7 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
       provider,
       model,
       memory: "",
-      tools: ["read_file", "list_files", "grep"],
+      tools: ["read_file", "list_files", "grep", "remember"],
     },
     {
       id: "mule",
@@ -72,7 +72,7 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
       provider,
       model,
       memory: "",
-      tools: ["read_file", "write_file", "list_files", "grep"],
+      tools: ["read_file", "write_file", "list_files", "grep", "remember"],
     },
   ];
 }

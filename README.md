@@ -80,6 +80,16 @@ Any agent carrying the `shell` tool works inside a **sandboxed computer** (power
 
 Note (Bun): just-bash's `defenseInDepth` layer is disabled here because it requires Node's `module.registerHooks`. Isolation comes from the filesystem layer itself.
 
+## Memory that compounds
+
+Every worker — house crew and temps alike — carries a **`remember`** tool. It saves dated, durable notes into the agent's own memory, which is injected into every future turn:
+
+- User preferences, project conventions, hard-won lessons, open threads
+- Capped at 8k chars; when memory fills, the **oldest notes fall off first**
+- House agents persist their memory to `.yarddog/agents.json`; temps keep session-scoped memory that clocks out with them
+
+This is the compounding loop: the more you work with your crew, the less you repeat yourself.
+
 ## Judgment ground rules
 
 Every agent — house or temp — works under the same authority line:

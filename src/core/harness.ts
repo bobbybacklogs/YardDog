@@ -14,6 +14,7 @@ import { TOOLS, needsApproval, type ToolContext } from "./tools";
 import { defaultCrew } from "./crew";
 import { slugifyTag, specToTempDef, tempRoots } from "./hall";
 import { prepareSkills } from "./library";
+import { applyMemory } from "./memory";
 import { Computer } from "../workspace/computer";
 import type {
   AgentDef,
@@ -330,6 +331,7 @@ export class YardDog extends EventEmitter {
         computer: agent.tools.includes("shell")
           ? await this.computerFor(agent.tag)
           : undefined,
+        remember: (mode, note) => this.writeMemory(agent, mode, note),
       };
 
       if (specs.length === 0) {
@@ -540,6 +542,18 @@ export class YardDog extends EventEmitter {
       this.computers.set(tag, computer);
     }
     return computer;
+  }
+
+  /** Durable-memory write path behind the `remember` tool. */
+  private async writeMemory(
+    agent: AgentDef,
+    mode: "append" | "replace",
+    note: string,
+  ): Promise<string> {
+    applyMemory(agent, mode, note);
+    // Temps are session-scoped; their memory clocks out with them.
+    if (!agent.temp) await this.store.saveCrew(this.crew);
+    return mode === "replace" ? "memory replaced" : "remembered";
   }
 
   // ---- Plumbing -----------------------------------------------------------

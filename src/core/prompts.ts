@@ -42,6 +42,17 @@ export function buildSystemPrompt(agent: AgentDef, crew: AgentDef[], delegator?:
 
   parts.push(`[TEAM ROSTER]\n${renderRoster(crew, agent.tag)}`);
 
+  if (agent.tools.includes("remember")) {
+    parts.push(
+      [
+        "[YOUR MEMORY]",
+        "Your `remember` tool saves durable notes that are injected into every future conversation.",
+        "Record sparingly but honestly: user preferences, project conventions, hard-won lessons, open threads worth revisiting.",
+        "Notes are dated automatically. When memory fills, your oldest notes fall off first — keep notes short and high-value.",
+      ].join("\n"),
+    );
+  }
+
   const workspaceNote = agent.tools.includes("shell")
     ? `[YOUR COMPUTER]
 Your \`shell\` tool runs a private sandboxed bash just for you:

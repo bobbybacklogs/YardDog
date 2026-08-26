@@ -20,6 +20,8 @@ export interface ToolContext {
   agentTag: string;
   /** The calling agent's sandboxed computer; present for the `shell` tool. */
   computer?: Computer;
+  /** Durable-memory writer; present for the `remember` tool. */
+  remember?: (mode: "append" | "replace", note: string) => Promise<string>;
 }
 
 export interface ToolSpec {
@@ -239,6 +241,33 @@ const shell: ToolSpec = {
   },
 };
 
+const remember: ToolSpec = {
+  def: {
+    name: "remember",
+    description:
+      "Save a durable note to YOUR OWN memory. Your memory is injected into every future conversation — record user preferences, project conventions, hard-won lessons, and open threads. Notes are dated automatically; when memory fills, the oldest notes fall off first.",
+    parameters: {
+      type: "object",
+      properties: {
+        note: { type: "string", description: "The note to save (one concise thought)" },
+        mode: {
+          type: "string",
+          enum: ["append", "replace"],
+          description: "append (default) adds a dated line; replace rewrites your entire memory",
+        },
+      },
+      required: ["note"],
+    },
+  },
+  async execute(args, ctx) {
+    if (!ctx.remember) {
+      throw new ToolError("no memory attached to this agent");
+    }
+    const mode = args.mode === "replace" ? "replace" : "append";
+    return ctx.remember(mode, str(args, "note"));
+  },
+};
+
 export const TOOLS: Record<string, ToolSpec> = {
   read_file,
   write_file,
@@ -246,11 +275,12 @@ export const TOOLS: Record<string, ToolSpec> = {
   grep: grep_files,
   run_shell,
   shell,
+  remember,
 };
 
 /** Tools that never need human approval. The sandboxed shell counts as safe:
  *  writes are confined to the agent's own home under .yarddog/workspaces/. */
-const SAFE_TOOLS = new Set(["read_file", "list_files", "grep", "shell"]);
+const SAFE_TOOLS = new Set(["read_file", "list_files", "grep", "shell", "remember"]);
 
 export function needsApproval(name: string): boolean {
   return !SAFE_TOOLS.has(name);
