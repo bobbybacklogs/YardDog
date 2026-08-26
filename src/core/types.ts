@@ -5,7 +5,7 @@ export type Presence = "idle" | "working" | "handoff" | "escalated" | "error";
 
 /**
  * A YardDog agent definition. Pure data — JSON-safe, persisted as-is.
- * All LLM traffic goes through ModelHitch via the agent's provider/model lane.
+ * ModelHitch exclusively owns provider/model routing for every agent.
  */
 export interface AgentDef {
   id: string;
@@ -15,8 +15,6 @@ export interface AgentDef {
   role: string;
   description?: string;
   systemPrompt: string;
-  provider: string;
-  model: string;
   temperature?: number;
   /** Max tool-loop turns for this agent (default 8). */
   maxTurns?: number;

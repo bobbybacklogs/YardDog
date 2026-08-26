@@ -19,7 +19,7 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 - **They page you only for judgment calls.** `@escalate(question)` stops the chain and flags a human.
 - **Everyone sees the shared thread.** Agents read the transcript labeled by author tag — no copy-pasting notes between chats.
 - **They remember.** Per-agent durable memory notes are injected into every turn, across sessions.
-- **Every wheel rolls through ModelHitch.** One instance, BYOK keys, per-agent provider/model lanes, automatic 429/5xx failover, honest telemetry (`served via failover lane`, token counts).
+- **Every wheel rolls through ModelHitch.** One instance, ModelHitch-owned provider/model policy, BYOK keys, automatic 429/5xx failover, and honest telemetry (`served via failover lane`, token counts).
 
 ## The default crew
 
@@ -30,7 +30,7 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 | `@spotter` | Scout — read-only codebase reconnaissance | read/list/grep |
 | `@mule` | Docs hauler — READMEs, guides, changelogs | read/write/list/grep |
 
-Edit `.yarddog/agents.json` to rewire lanes, prompts, memory, or add crew members. All agents default to the config lane; pin `provider`/`model` per agent to mix providers across the fleet.
+Edit `.yarddog/agents.json` to adjust prompts, memory, or add crew members. Provider and model routing is never stored on agents; every turn follows ModelHitch's configuration in `~/.modelhitch/config.json` (or `$MODELHITCH_HOME/config.json`).
 
 ## The hiring hall
 
@@ -46,7 +46,7 @@ yarddog tui --hire "Chrome Extension Reviewer,Final Validator"
 - **Temps ride the A2A protocol for free**: once hired, they appear in every agent's team roster, so `@foreman` can `@delegate` or be consulted by them with zero configuration.
 - **Session-scoped**: temps are never written to `.yarddog/agents.json` — when the session ends, they clock out.
 - **Honest receipts**: vendor tool names (`read`, `search`, `web`, `vscode/*`) are mapped onto YardDog's real tools; anything without an equivalent is dropped and noted, never faked.
-- **Model lanes**: explicit `provider/model` pairs in a spec are honored; vendor shorthand (`inherit`, `sonnet`) rides the config's default lane.
+- **Model declarations**: imported agent model hints are ignored with a receipt note. ModelHitch remains the only routing authority.
 
 ## The skill library
 
@@ -160,12 +160,12 @@ Everything lives under `<workdir>/.yarddog/`:
 
 ```
 .yarddog/
-├─ config.json     # default provider/model lane, maxDepth, autoApproveTools
+├─ config.json     # maxDepth, autoApproveTools, MCP servers
 ├─ agents.json     # the crew
 └─ threads/<id>.json
 ```
 
-Delete it for a fresh yard.
+Delete it for a fresh yard. Model routing and credentials remain in ModelHitch's own configuration, managed with `modelhitch settings`.
 
 ## Architecture
 

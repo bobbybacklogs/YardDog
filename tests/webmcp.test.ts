@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ModelHitch } from "modelhitch";
 import { YardDog } from "../src/core/harness";
 import { startServe } from "../src/serve";
 
@@ -12,9 +13,12 @@ beforeAll(async () => {
   await mkdir(path.join(workdir, ".yarddog"), { recursive: true });
   await writeFile(
     path.join(workdir, ".yarddog", "config.json"),
-    JSON.stringify({ provider: "mock", model: "mock-model", maxDepth: 3, autoApproveTools: true }),
+    JSON.stringify({ maxDepth: 3, autoApproveTools: true }),
   );
-  const dog = await YardDog.create({ workdir });
+  const dog = await YardDog.create({
+    workdir,
+    modelHitch: new ModelHitch({ defaultProviderId: "mock", defaultModel: "mock-model" }),
+  });
   server = startServe(dog, { port: 0 }); // random free port
 });
 

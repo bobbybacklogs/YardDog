@@ -56,7 +56,7 @@ export function startServe(dog: YardDog, opts: ServeOptions = {}): ReturnType<ty
             role: a.role,
             temp: a.temp?.vendor ?? null,
             presence: dog.getPresence(a.tag),
-            lane: `${a.provider}/${a.model}`,
+            lane: "modelhitch",
           })),
         });
       }

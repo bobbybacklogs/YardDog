@@ -3,7 +3,7 @@ import { buildSystemPrompt, historyToMessages, renderRoster } from "../src/core/
 import { defaultCrew } from "../src/core/crew";
 import type { ThreadMessage } from "../src/core/types";
 
-const crew = defaultCrew("mock", "mock-model");
+const crew = defaultCrew();
 
 describe("renderRoster", () => {
   test("marks self", () => {

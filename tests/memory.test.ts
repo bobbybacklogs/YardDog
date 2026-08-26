@@ -10,8 +10,6 @@ function agent(): AgentDef {
     name: "T",
     role: "tester",
     systemPrompt: "",
-    provider: "mock",
-    model: "mock-model",
     memory: "",
     tools: ["remember"],
   };

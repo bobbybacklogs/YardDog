@@ -1,9 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { homedir } from "node:os";
+import path from "node:path";
 import {
+  MemoryKeyStore,
   ModelHitch,
+  buildCatalogOptions,
+  buildCooldownFromConfig,
+  defaultConfigTemplate,
   isModelHitchError,
+  policyFromConfig,
+  readConfigFile,
   runToolLoop,
+  validateConfig,
   type ModelMessage,
   type ToolDefinition,
 } from "modelhitch";
@@ -32,6 +41,35 @@ import type {
 export interface YardDogOptions {
   /** All tool operations and persistence are confined here. Default: cwd. */
   workdir?: string;
+  /** Preconfigured ModelHitch client. Intended for tests and embedding. */
+  modelHitch?: ModelHitch;
+}
+
+async function createConfiguredModelHitch(onFailover: () => void): Promise<ModelHitch> {
+  const modelHitchHome = process.env.MODELHITCH_HOME ?? path.join(homedir(), ".modelhitch");
+  const configPath = path.join(modelHitchHome, "config.json");
+  const config = readConfigFile(configPath) ?? defaultConfigTemplate();
+  const { errors } = validateConfig(config);
+  if (errors.length > 0) {
+    throw new Error(`ModelHitch config ${configPath} is invalid:\n- ${errors.join("\n- ")}`);
+  }
+
+  const keystore = new MemoryKeyStore();
+  await Promise.all(
+    Object.entries(config.keys ?? {}).map(([providerId, apiKey]) =>
+      keystore.set(providerId, apiKey),
+    ),
+  );
+
+  return ModelHitch.create({
+    defaultProviderId: config.defaultProviderId,
+    defaultModel: config.defaultModel,
+    policy: policyFromConfig(config),
+    catalog: buildCatalogOptions(config),
+    cooldown: buildCooldownFromConfig(config),
+    keystore,
+    onFailover,
+  });
 }
 
 /**
@@ -50,7 +88,7 @@ export class YardDog extends EventEmitter {
   private threads: Map<string, Thread> = new Map();
   private presence: Map<string, Presence> = new Map();
   private busy = false;
-  /** Shared counter bumped by ModelHitch autoMode on every lane switch. */
+  /** Shared counter bumped by ModelHitch on every lane switch. */
   private readonly failoverCounter: { count: number };
   /** Per-job consult budget — resets at each send(). */
   private consultBudget = { remaining: 0 };
@@ -86,20 +124,13 @@ export class YardDog extends EventEmitter {
 
     const config = await store.loadConfig();
     const failoverCounter = { count: 0 };
-    const mh = new ModelHitch({
-      autoMode: true,
-      defaultProviderId: config.provider,
-      defaultModel: config.model,
-      // autoMode handles lane switching inside ModelHitch; we only count
-      // switches so each turn's meta can report whether it was failed over.
-      onFailover: () => {
-        failoverCounter.count++;
-      },
+    const mh = options.modelHitch ?? await createConfiguredModelHitch(() => {
+      failoverCounter.count++;
     });
 
     const dog = new YardDog(mh, store, config, failoverCounter);
     const existingCrew = await store.loadCrew();
-    dog.crew = existingCrew ?? defaultCrew(config.provider, config.model);
+    dog.crew = existingCrew ?? defaultCrew();
     if (!existingCrew) await store.saveCrew(dog.crew);
 
     for (const thread of await store.loadThreads()) dog.threads.set(thread.id, thread);
@@ -152,12 +183,6 @@ export class YardDog extends EventEmitter {
     if (this.agent(wanted)) throw new Error(`@${wanted} is already on the crew`);
 
     const { def, notes } = specToTempDef(spec);
-    // Empty provider/model means "ride the config lane" — fill them so
-    // ModelHitch calls stay uniform.
-    if (!def.provider) {
-      def.provider = this.config.provider;
-      def.model = this.config.model;
-    }
     this.crew.push(def);
     this.presence.set(def.tag, "idle");
     return { def, notes };
@@ -350,25 +375,9 @@ export class YardDog extends EventEmitter {
         remember: (mode, note) => this.writeMemory(agent, mode, note),
       };
 
-      // Capability gate: a lane without tool calling gets a plain turn plus a
-      // note, instead of an opaque provider error.
-      let toolCalling = true;
-      try {
-        toolCalling = this.mh.capabilities(agent.provider).toolCalling;
-      } catch {
-        // unknown provider id — let the natural call surface the real error
-      }
-      if (!toolCalling) {
-        specs.length = 0;
-        tools.length = 0;
-      }
-
       if (tools.length === 0) {
-        // Plain streaming turn — no tools to wrangle. autoMode fails over
-        // transparently before the first chunk, so we just count switches.
+        // ModelHitch selects the primary and fails over before the first chunk.
         const stream = await this.mh.stream({
-          provider: agent.provider,
-          model: agent.model,
           messages,
           temperature: agent.temperature,
         });
@@ -381,7 +390,7 @@ export class YardDog extends EventEmitter {
           }
         }
       } else {
-        for await (const ev of runToolLoop(this.mh, { provider: agent.provider, model: agent.model, messages, tools, temperature: agent.temperature }, (name, args) => (name.startsWith("mcp__") ? this.executeMcpTool(agent, name, args) : this.executeTool(agent, name, args, ctx)), { maxTurns: agent.maxTurns ?? 8 })) {
+        for await (const ev of runToolLoop(this.mh, { messages, tools, temperature: agent.temperature }, (name, args) => (name.startsWith("mcp__") ? this.executeMcpTool(agent, name, args) : this.executeTool(agent, name, args, ctx)), { maxTurns: agent.maxTurns ?? 8 })) {
           if (ev.type === "chunk" && ev.chunk.type === "text-delta") {
             this.emitEvent({ type: "delta", threadId, agentTag: agent.tag, text: ev.chunk.text });
           } else if (ev.type === "tool") {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { ModelHitch } from "modelhitch";
 import { YardDog } from "../src/core/harness";
 
 async function makeDog(): Promise<YardDog> {
@@ -8,9 +9,12 @@ async function makeDog(): Promise<YardDog> {
   await mkdir(path.join(workdir, ".yarddog"), { recursive: true });
   await writeFile(
     path.join(workdir, ".yarddog", "config.json"),
-    JSON.stringify({ provider: "mock", model: "mock-model", maxDepth: 3, autoApproveTools: true }),
+    JSON.stringify({ maxDepth: 3, autoApproveTools: true }),
   );
-  return YardDog.create({ workdir });
+  return YardDog.create({
+    workdir,
+    modelHitch: new ModelHitch({ defaultProviderId: "mock", defaultModel: "mock-model" }),
+  });
 }
 
 describe("job queue", () => {

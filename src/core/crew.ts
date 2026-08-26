@@ -3,11 +3,8 @@ import type { AgentDef } from "./types";
 /**
  * The default yard crew. Freight-themed, Grok-Bot-shaped:
  * one foreman coordinating specialists who hand work to each other.
- *
- * Crew members inherit the config's default provider/model lane unless they
- * pin their own — edit `.yarddog/agents.json` to rewire anyone.
  */
-export function defaultCrew(provider: string, model: string): AgentDef[] {
+export function defaultCrew(): AgentDef[] {
   return [
     {
       id: "foreman",
@@ -22,8 +19,6 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
         "When results come back to you, verify them briefly and summarize for the user.",
         "You do not do specialist work yourself when a teammate owns it.",
       ].join("\n"),
-      provider,
-      model,
       memory: "",
       tools: ["remember"],
     },
@@ -38,8 +33,6 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
         "Prefer small, surgical edits that match surrounding style. Verify your work with list_files/grep/run_shell where possible.",
         "Summarize exactly which files you changed and why.",
       ].join("\n"),
-      provider,
-      model,
       memory: "",
       tools: ["read_file", "write_file", "list_files", "grep", "run_shell", "shell", "remember"],
     },
@@ -54,8 +47,6 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
         "You are the reconnaissance specialist. You never modify anything — read-only tools only.",
         "Answer with concrete facts: file paths, line references, exact names. No speculation presented as fact; say what you could not confirm.",
       ].join("\n"),
-      provider,
-      model,
       memory: "",
       tools: ["read_file", "list_files", "grep", "remember"],
     },
@@ -69,8 +60,6 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
         "You are the documentation specialist. Write clear, plain markdown grounded in the actual code — read files first, never invent APIs or flags.",
         "Match the existing tone of the project's docs when there are any.",
       ].join("\n"),
-      provider,
-      model,
       memory: "",
       tools: ["read_file", "write_file", "list_files", "grep", "remember"],
     },

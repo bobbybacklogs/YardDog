@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     const dog = await YardDog.create({ workdir: args.workdir });
     console.log("Crew roster:");
     for (const agent of dog.agents) {
-      console.log(`  @${agent.tag.padEnd(10)} ${agent.role}  [${agent.provider}/${agent.model}] tools=${agent.tools.join(",") || "none"}`);
+      console.log(`  @${agent.tag.padEnd(10)} ${agent.role}  [ModelHitch] tools=${agent.tools.join(",") || "none"}`);
     }
     return;
   }

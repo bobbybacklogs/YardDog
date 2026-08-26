@@ -10,9 +10,6 @@ import type { AgentDef, Thread } from "./types";
  */
 
 export interface HarnessConfig {
-  /** Provider/model used for crew members that don't override their lane. */
-  provider: string;
-  model: string;
   /** Orchestration depth cap (default 3). */
   maxDepth: number;
   /** Auto-approve heavy tools (write_file, run_shell) without prompting. */
@@ -25,8 +22,6 @@ export interface HarnessConfig {
 }
 
 export const DEFAULT_CONFIG: HarnessConfig = {
-  provider: "opencode-zen",
-  model: "deepseek-v4-flash-free",
   maxDepth: 3,
   autoApproveTools: false,
 };
@@ -60,8 +55,11 @@ export class Store {
 
   async loadConfig(): Promise<HarnessConfig> {
     try {
-      const raw = JSON.parse(await readFile(path.join(this.dir, "config.json"), "utf8"));
-      return { ...DEFAULT_CONFIG, ...raw };
+      const parsed = JSON.parse(await readFile(path.join(this.dir, "config.json"), "utf8")) as Record<string, unknown>;
+      const { provider: _provider, model: _model, ...raw } = parsed;
+      const config = { ...DEFAULT_CONFIG, ...raw } as HarnessConfig;
+      if ("provider" in parsed || "model" in parsed) await this.saveConfig(config);
+      return config;
     } catch {
       return { ...DEFAULT_CONFIG };
     }
@@ -78,7 +76,15 @@ export class Store {
   async loadCrew(): Promise<AgentDef[] | null> {
     try {
       const raw = JSON.parse(await readFile(path.join(this.dir, "agents.json"), "utf8"));
-      return Array.isArray(raw) ? (raw as AgentDef[]) : null;
+      if (!Array.isArray(raw)) return null;
+      let migrated = false;
+      const crew = raw.map((entry: Record<string, unknown>) => {
+        const { provider: _provider, model: _model, ...agent } = entry;
+        migrated ||= "provider" in entry || "model" in entry;
+        return agent as unknown as AgentDef;
+      });
+      if (migrated) await this.saveCrew(crew);
+      return crew;
     } catch {
       return null;
     }

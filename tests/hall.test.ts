@@ -100,19 +100,18 @@ describe("specToTempDef", () => {
     expect(notes.join("\n")).toContain("no yarddog equivalent for tools: web");
   });
 
-  test("vendor model shorthand falls back with a note; explicit lanes are kept", () => {
+  test("vendor model declarations are ignored because ModelHitch owns routing", () => {
     const fallback = specToTempDef(fakeSpec({ model: "sonnet" }));
-    expect(fallback.def.provider).toBe("");
-    expect(fallback.notes.join("\n")).toContain('model "sonnet" not resolvable');
+    expect(fallback.notes.join("\n")).toContain('model "sonnet" ignored');
 
     const explicit = specToTempDef(fakeSpec({ model: "anthropic/claude-sonnet-4" }));
-    expect(explicit.def.provider).toBe("anthropic");
-    expect(explicit.def.model).toBe("claude-sonnet-4");
+    expect(explicit.notes.join("\n")).toContain('model "anthropic/claude-sonnet-4" ignored');
+    expect(explicit.def).not.toHaveProperty("provider");
+    expect(explicit.def).not.toHaveProperty("model");
   });
 
   test("'inherit' model is silent — no lane note", () => {
     const r = specToTempDef(fakeSpec({ model: "inherit" }));
-    expect(r.def.provider).toBe("");
     expect(r.notes.filter((n) => n.includes("model"))).toEqual([]);
   });
 });
