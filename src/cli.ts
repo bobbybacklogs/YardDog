@@ -20,12 +20,14 @@ Usage:
   yarddog hire <name>... Hire temps onto this session's roster
   yarddog fire <tag>...  Fire temps from the roster (session-scoped)
   yarddog threads        List saved threads
+  yarddog serve          HTTP + SSE surface for the yard (localhost only)
 
 Flags:
   --workdir <path>       Operate on a project directory (default: cwd)
   --auto-approve         Approve write/shell tool calls without prompting
   --hire <name,...>      Hire temps (from local agent directories) for this run
-  --skill <name,...>     Attach library skills to the job (see: yarddog skills)`);
+  --skill <name,...>     Attach library skills to the job (see: yarddog skills)
+  --port <n>             Port for serve (default 4343 or $YARDDOG_PORT)`);
   process.exit(0);
 }
 
@@ -36,6 +38,7 @@ interface CliArgs {
   autoApprove: boolean;
   hires: string[];
   skills: string[];
+  port?: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -46,7 +49,7 @@ function parseArgs(argv: string[]): CliArgs {
     hires: [],
     skills: [],
   };
-  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills"]);
+  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills", "serve"]);
   const rest = [...argv];
   let sawCommand = false;
   while (rest.length > 0) {
@@ -55,6 +58,8 @@ function parseArgs(argv: string[]): CliArgs {
       args.workdir = rest.shift();
     } else if (arg === "--auto-approve" || arg === "-y") {
       args.autoApprove = true;
+    } else if (arg === "--port") {
+      args.port = Number(rest.shift());
     } else if (arg === "--hire") {
       // Comma-separated list: --hire a,b,c (repeatable)
       const next = rest[0];
@@ -155,6 +160,16 @@ async function main(): Promise<void> {
       console.log(`        ${(s.description || "(no description)").slice(0, 100)}`);
     }
     if (library.length === 0) console.log("  (none found)");
+    return;
+  }
+
+  if (args.command === "serve") {
+    const { startServe } = await import("./serve");
+    const dog = await YardDog.create({ workdir: args.workdir });
+    dog.config.autoApproveTools = args.autoApprove;
+    await hireRequested(dog, args.hires);
+    startServe(dog, { port: args.port });
+    // serve keeps the process alive via Bun's active server handle
     return;
   }
 

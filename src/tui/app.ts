@@ -108,6 +108,22 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
     }
     fleetBox.add(Text({ content: " ", fg: "#444444" }));
     fleetBox.add(Text({ content: " ~ = hired temp", fg: "#666666" }));
+
+    // Thread tabs
+    const threads = dog.listThreads().slice(0, Math.max(3, 10 - dog.agents.length));
+    if (threads.length > 0) {
+      fleetBox.add(Text({ content: " ── threads ──", fg: "#555555" }));
+      for (const t of threads) {
+        const current = t.id === thread.id;
+        fleetBox.add(
+          Text({
+            content: `${current ? "▸" : " "} ${t.id} ${t.title.slice(0, 14)}`,
+            fg: current ? "#FFD75E" : "#777777",
+          }),
+        );
+      }
+      fleetBox.add(Text({ content: " /open <id>", fg: "#555555" }));
+    }
   }
 
   // Feed ------------------------------------------------------------------
@@ -119,6 +135,8 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
     borderColor: "#444444",
     paddingLeft: 1,
     paddingRight: 1,
+    stickyScroll: true,
+    stickyStart: "bottom",
   }) as unknown as Container & { scrollToBottom?: () => void };
   body.add(feed);
 
