@@ -18,7 +18,9 @@
   "scripts": {
     "start": "bun run src/cli.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "build": "bun build src/cli.ts --compile --outfile bin/yarddog",
+    "install:global": "bun run build && bun link"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

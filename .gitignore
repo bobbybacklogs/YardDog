@@ -138,5 +138,9 @@ dist
 # YardDog runtime state (crew, threads, config)
 .yarddog/
 
+# Compiled single-file executables
+bin/yarddog
+bin/yarddog.exe
+
 # Test scratch dirs
 tests/.tmp-*
