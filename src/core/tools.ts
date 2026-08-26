@@ -2,17 +2,24 @@ import { spawn } from "node:child_process";
 import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { ToolDefinition } from "modelhitch";
+import type { Computer } from "../workspace/computer";
 
 /**
  * Built-in tool registry. Every tool is workdir-confined: paths resolve
- * against the harness workdir and escapes are refused. `run_shell` is the
- * heavy hauler — it goes through the approval gate unless explicitly waived.
+ * against the harness workdir and escapes are refused.
+ *
+ * Two shells, two trust levels:
+ *   `shell`     — sandboxed per-agent computer (just-bash): private home +
+ *                 read-only /project mount. No approval needed.
+ *   `run_shell` — REAL host shell in the workdir. Approval-gated.
  */
 
 export interface ToolContext {
   /** Absolute working directory all tool operations are confined to. */
   workdir: string;
   agentTag: string;
+  /** The calling agent's sandboxed computer; present for the `shell` tool. */
+  computer?: Computer;
 }
 
 export interface ToolSpec {
@@ -170,7 +177,7 @@ const run_shell: ToolSpec = {
   def: {
     name: "run_shell",
     description:
-      "Run a shell command in the workdir (bash on POSIX, powershell on Windows). Returns stdout/stderr. Use for builds, tests, git status — not for interactive commands.",
+      "Run a command on the REAL host in the workdir (bash on POSIX, powershell on Windows). Returns stdout/stderr. Heavier and riskier than `shell` — use only when the sandbox cannot do the job (installing packages, git push, etc.).",
     parameters: {
       type: "object",
       properties: {
@@ -207,16 +214,43 @@ const run_shell: ToolSpec = {
   },
 };
 
+const shell: ToolSpec = {
+  def: {
+    name: "shell",
+    description:
+      "Run a bash command inside YOUR private sandboxed computer. Layout: /home/<your-tag> is your persistent private workspace (survives between your turns); /project is the user's repo mounted READ-ONLY — read it freely with cat/grep/find, but writes there fail. Pipes, redirects, globs, coreutils all work.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "The bash command to run in the sandbox" },
+      },
+      required: ["command"],
+    },
+  },
+  async execute(args, ctx) {
+    if (!ctx.computer) {
+      throw new ToolError("no computer attached to this agent");
+    }
+    const result = await ctx.computer.run(str(args, "command"));
+    const body = `${result.stderr ? `stderr:\n${result.stderr}\n` : ""}${
+      result.stdout ? `stdout:\n${result.stdout}` : ""
+    }`.trim();
+    return `exit code ${result.exitCode}${body ? `\n${body}` : ""}`;
+  },
+};
+
 export const TOOLS: Record<string, ToolSpec> = {
   read_file,
   write_file,
   list_files,
   grep: grep_files,
   run_shell,
+  shell,
 };
 
-/** Tools that never need human approval. */
-const SAFE_TOOLS = new Set(["read_file", "list_files", "grep"]);
+/** Tools that never need human approval. The sandboxed shell counts as safe:
+ *  writes are confined to the agent's own home under .yarddog/workspaces/. */
+const SAFE_TOOLS = new Set(["read_file", "list_files", "grep", "shell"]);
 
 export function needsApproval(name: string): boolean {
   return !SAFE_TOOLS.has(name);

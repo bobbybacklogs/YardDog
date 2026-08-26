@@ -51,7 +51,7 @@ describe("slugifyTag", () => {
 describe("mapTools", () => {
   test("maps vendor names onto yarddog tools", () => {
     const { tools, dropped } = mapTools(["read", "search", "edit", "execute"]);
-    expect(tools.sort()).toEqual(["grep", "read_file", "run_shell", "write_file"]);
+    expect(tools.sort()).toEqual(["grep", "read_file", "shell", "write_file"]);
     expect(dropped).toEqual([]);
   });
   test("drops unknown vendor tools with receipt", () => {

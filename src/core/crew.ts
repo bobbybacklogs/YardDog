@@ -41,7 +41,7 @@ export function defaultCrew(provider: string, model: string): AgentDef[] {
       provider,
       model,
       memory: "",
-      tools: ["read_file", "write_file", "list_files", "grep", "run_shell"],
+      tools: ["read_file", "write_file", "list_files", "grep", "run_shell", "shell"],
     },
     {
       id: "spotter",

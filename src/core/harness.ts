@@ -14,6 +14,7 @@ import { TOOLS, needsApproval, type ToolContext } from "./tools";
 import { defaultCrew } from "./crew";
 import { slugifyTag, specToTempDef, tempRoots } from "./hall";
 import { prepareSkills } from "./library";
+import { Computer } from "../workspace/computer";
 import type {
   AgentDef,
   Consult,
@@ -54,6 +55,8 @@ export class YardDog extends EventEmitter {
   private static readonly MAX_CONSULTS_PER_JOB = 4;
   /** Prompt injection for the job's attached skills; set during send(). */
   private activeSkillInjection = "";
+  /** Per-agent sandboxed computers, created on first shell use. */
+  private computers: Map<string, Computer> = new Map();
 
   private constructor(
     mh: ModelHitch,
@@ -290,7 +293,13 @@ export class YardDog extends EventEmitter {
         .map((name) => TOOLS[name])
         .filter((s): s is NonNullable<typeof s> => Boolean(s));
       const tools: ToolDefinition[] = specs.map((s) => s.def);
-      const ctx: ToolContext = { workdir: this.store.workdir, agentTag: agent.tag };
+      const ctx: ToolContext = {
+        workdir: this.store.workdir,
+        agentTag: agent.tag,
+        computer: agent.tools.includes("shell")
+          ? await this.computerFor(agent.tag)
+          : undefined,
+      };
 
       if (specs.length === 0) {
         // Plain streaming turn — no tools to wrangle. autoMode fails over
@@ -473,6 +482,16 @@ export class YardDog extends EventEmitter {
     } catch (err) {
       return `error: ${(err as Error).message}`;
     }
+  }
+
+  /** Lazily build (and cache) an agent's sandboxed computer. */
+  private async computerFor(tag: string): Promise<Computer> {
+    let computer = this.computers.get(tag);
+    if (!computer) {
+      computer = await Computer.create(tag, this.store.workdir, this.store.dir);
+      this.computers.set(tag, computer);
+    }
+    return computer;
   }
 
   // ---- Plumbing -----------------------------------------------------------

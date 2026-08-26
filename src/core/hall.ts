@@ -55,9 +55,9 @@ export function mapTools(vendorTools: string[] | undefined): { tools: string[]; 
     read: "read_file",
     search: "grep",
     edit: "write_file",
-    execute: "run_shell",
-    "execute/runinterminal": "run_shell",
-    "execute/getterminaloutput": "run_shell",
+    execute: "shell",
+    "execute/runinterminal": "shell",
+    "execute/getterminaloutput": "shell",
     list: "list_files",
   };
   const tools = new Set<string>();

@@ -42,6 +42,16 @@ export function buildSystemPrompt(agent: AgentDef, crew: AgentDef[], delegator?:
 
   parts.push(`[TEAM ROSTER]\n${renderRoster(crew, agent.tag)}`);
 
+  const workspaceNote = agent.tools.includes("shell")
+    ? `[YOUR COMPUTER]
+Your \`shell\` tool runs a private sandboxed bash just for you:
+- /home/${agent.tag} — your persistent workspace; notes, scratch files, and work products live here between your turns.
+- /project — the user's repo, mounted READ-ONLY. Read it freely (cat/grep/find); writes there fail.
+Use \`shell\` for exploration and drafting; use write_file for deliverables the user asked to change.`
+    : "";
+
+  if (workspaceNote) parts.push(workspaceNote);
+
   const protocol = [
     "[TEAMWORK PROTOCOL]",
     "You are part of a working crew. If a distinct part of this request clearly belongs to another teammate in the roster, finish your own portion of the work first, then append this directive as the very LAST line of your reply:",

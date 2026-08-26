@@ -63,6 +63,23 @@ yarddog tui --skill firebase-firestore,firebase-auth   # session-wide attach
 - Skills referencing vendor tools get a "use your closest equivalents" note — never fake capability.
 - Attachments are recorded in the thread transcript for auditability.
 
+## Computers — every worker gets a yard of their own
+
+Any agent carrying the `shell` tool works inside a **sandboxed computer** (powered by [just-bash](https://github.com/vercel-labs/just-bash)):
+
+```
+/home/<tag>   private persistent workspace → .yarddog/workspaces/<tag>/ on disk
+/project      the user's repo, mounted READ-ONLY
+```
+
+- Pipes, redirects, globs, coreutils; 30s wall-clock limit per command.
+- Homes persist across turns and sessions — agents keep scratch notes, drafts, and work products.
+- Agents are isolated: `@wrecker` cannot read `@mule`'s home.
+- Writes to `/project` fail (`EROFS`) — repo integrity is enforced by the filesystem, not by prompt politeness.
+- Two-tier shell policy: sandboxed `shell` is approval-free (writes confined to `.yarddog/workspaces/`); host-level `run_shell` stays behind the approval gate.
+
+Note (Bun): just-bash's `defenseInDepth` layer is disabled here because it requires Node's `module.registerHooks`. Isolation comes from the filesystem layer itself.
+
 ## Judgment ground rules
 
 Every agent — house or temp — works under the same authority line:
@@ -124,9 +141,11 @@ src/
 │  ├─ prompts.ts        persona ⊕ memory ⊕ team roster ⊕ ground rules
 │  ├─ hall.ts           the hiring hall: portage discovery → temp AgentDefs
 │  ├─ library.ts        the skill library: skillswap discovery → job-scoped injection
-│  ├─ tools.ts          workdir-confined tool registry + approval gate
+│  ├─ tools.ts          tool registry + approval gate (+ sandboxed shell)
 │  ├─ store.ts          JSON persistence under .yarddog/
 │  └─ crew.ts           default freight crew
+├─ workspace/
+│  └─ computer.ts       per-agent sandbox: private home + read-only /project
 └─ tui/app.ts           OpenTUI yard floor
 tests/                   bun test — protocol, prompts, tools, hiring hall
 ```
