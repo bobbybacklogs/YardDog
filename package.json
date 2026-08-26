@@ -14,7 +14,11 @@
   },
   "dependencies": {
     "@opentui/core": "^0.1.28",
+    "just-bash": "^3.4.2",
     "modelhitch": "^0.14.7"
+  },
+  "overrides": {
+    "minimatch": "9.0.5"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
