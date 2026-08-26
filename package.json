@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "^0.1.28",
     "just-bash": "^3.4.2",
     "modelhitch": "^0.14.7",

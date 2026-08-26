@@ -17,6 +17,11 @@ export interface HarnessConfig {
   maxDepth: number;
   /** Auto-approve heavy tools (write_file, run_shell) without prompting. */
   autoApproveTools: boolean;
+  /**
+   * MCP servers exposed to the whole crew, Claude-Desktop-style.
+   * Tool names surface as mcp__<server>__<tool> and ride the approval gate.
+   */
+  mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
 }
 
 export const DEFAULT_CONFIG: HarnessConfig = {

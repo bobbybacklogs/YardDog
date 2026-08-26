@@ -16,6 +16,7 @@ import { slugifyTag, specToTempDef, tempRoots } from "./hall";
 import { prepareSkills } from "./library";
 import { applyMemory } from "./memory";
 import { Computer } from "../workspace/computer";
+import { McpManager, type McpServerConfig } from "../mcp/host";
 import type {
   AgentDef,
   Consult,
@@ -58,6 +59,8 @@ export class YardDog extends EventEmitter {
   private activeSkillInjection = "";
   /** Per-agent sandboxed computers, created on first shell use. */
   private computers: Map<string, Computer> = new Map();
+  /** MCP floor: connected servers + their tools (may be empty). */
+  readonly mcp: McpManager;
   /** FIFO job queue: tail promise chains jobs so they never overlap. */
   private jobQueueTail: Promise<void> = Promise.resolve();
   private queuedJobs = 0;
@@ -73,6 +76,7 @@ export class YardDog extends EventEmitter {
     this.store = store;
     this.config = config;
     this.failoverCounter = failoverCounter;
+    this.mcp = new McpManager(config.mcpServers ?? {});
   }
 
   static async create(options: YardDogOptions = {}): Promise<YardDog> {
@@ -325,6 +329,18 @@ export class YardDog extends EventEmitter {
         .map((name) => TOOLS[name])
         .filter((s): s is NonNullable<typeof s> => Boolean(s));
       const tools: ToolDefinition[] = specs.map((s) => s.def);
+
+      // MCP floor: discovered server tools ride along with local tools —
+      // every crew member can reach them, gated like any heavy tool.
+      const mcpTools = await this.mcp.listTools();
+      for (const t of mcpTools) {
+        tools.push({
+          name: t.prefixedName,
+          description: `[MCP:${t.server}] ${t.description ?? t.name}`,
+          parameters: t.inputSchema,
+        });
+      }
+
       const ctx: ToolContext = {
         workdir: this.store.workdir,
         agentTag: agent.tag,
@@ -342,9 +358,12 @@ export class YardDog extends EventEmitter {
       } catch {
         // unknown provider id — let the natural call surface the real error
       }
-      if (!toolCalling) specs.length = 0;
+      if (!toolCalling) {
+        specs.length = 0;
+        tools.length = 0;
+      }
 
-      if (specs.length === 0) {
+      if (tools.length === 0) {
         // Plain streaming turn — no tools to wrangle. autoMode fails over
         // transparently before the first chunk, so we just count switches.
         const stream = await this.mh.stream({
@@ -362,7 +381,7 @@ export class YardDog extends EventEmitter {
           }
         }
       } else {
-        for await (const ev of runToolLoop(this.mh, { provider: agent.provider, model: agent.model, messages, tools, temperature: agent.temperature }, (name, args) => this.executeTool(agent, name, args, ctx), { maxTurns: agent.maxTurns ?? 8 })) {
+        for await (const ev of runToolLoop(this.mh, { provider: agent.provider, model: agent.model, messages, tools, temperature: agent.temperature }, (name, args) => (name.startsWith("mcp__") ? this.executeMcpTool(agent, name, args) : this.executeTool(agent, name, args, ctx)), { maxTurns: agent.maxTurns ?? 8 })) {
           if (ev.type === "chunk" && ev.chunk.type === "text-delta") {
             this.emitEvent({ type: "delta", threadId, agentTag: agent.tag, text: ev.chunk.text });
           } else if (ev.type === "tool") {
@@ -564,6 +583,18 @@ export class YardDog extends EventEmitter {
     // Temps are session-scoped; their memory clocks out with them.
     if (!agent.temp) await this.store.saveCrew(this.crew);
     return mode === "replace" ? "memory replaced" : "remembered";
+  }
+
+  /** MCP tool execution — same approval gate as everything else. */
+  private async executeMcpTool(
+    agent: AgentDef,
+    prefixedName: string,
+    args: Record<string, unknown>,
+  ): Promise<string> {
+    if (!(await this.approveTool(agent.tag, prefixedName, args))) {
+      return "error: the human declined this tool call";
+    }
+    return this.mcp.callTool(prefixedName, args);
   }
 
   // ---- Plumbing -----------------------------------------------------------

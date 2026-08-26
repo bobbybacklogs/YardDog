@@ -80,6 +80,24 @@ Any agent carrying the `shell` tool works inside a **sandboxed computer** (power
 
 Note (Bun): just-bash's `defenseInDepth` layer is disabled here because it requires Node's `module.registerHooks`. Isolation comes from the filesystem layer itself.
 
+## The MCP floor
+
+YardDog is an **MCP host**. Declare servers in `.yarddog/config.json` — same shape as Claude Desktop / Cursor, so existing blocks are drop-in:
+
+```json
+{
+  "mcpServers": {
+    "fetch": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] },
+    "playwright": { "command": "npx", "args": ["@playwright/mcp@latest"] }
+  }
+}
+```
+
+- Every discovered tool surfaces to the whole crew as `mcp__<server>__<tool>` and rides the normal tool-call loop
+- MCP tools go through the **approval gate** by default (they're powerful by nature); `--auto-approve` waives it
+- `yarddog mcp` connects and lists what's on the floor
+- This is how temps get their platform's real tools back: `web`, `browser`, GitHub ops — each is one MCP server away, no first-party reimplementation
+
 ## Memory that compounds
 
 Every worker — house crew and temps alike — carries a **`remember`** tool. It saves dated, durable notes into the agent's own memory, which is injected into every future turn:
@@ -156,6 +174,8 @@ src/
 │  └─ crew.ts           default freight crew
 ├─ workspace/
 │  └─ computer.ts       per-agent sandbox: private home + read-only /project
+├─ mcp/
+│  └─ host.ts           MCP floor: stdio servers → crew-wide tools
 └─ tui/app.ts           OpenTUI yard floor
 tests/                   bun test — protocol, prompts, tools, hiring hall
 ```

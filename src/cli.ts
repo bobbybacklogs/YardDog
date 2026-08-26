@@ -21,6 +21,7 @@ Usage:
   yarddog fire <tag>...  Fire temps from the roster (session-scoped)
   yarddog threads        List saved threads
   yarddog serve          HTTP + SSE surface for the yard (localhost only)
+  yarddog mcp            Connect configured MCP servers and list their tools
 
 Flags:
   --workdir <path>       Operate on a project directory (default: cwd)
@@ -49,7 +50,7 @@ function parseArgs(argv: string[]): CliArgs {
     hires: [],
     skills: [],
   };
-  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills", "serve"]);
+  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills", "serve", "mcp"]);
   const rest = [...argv];
   let sawCommand = false;
   while (rest.length > 0) {
@@ -170,6 +171,27 @@ async function main(): Promise<void> {
     await hireRequested(dog, args.hires);
     startServe(dog, { port: args.port });
     // serve keeps the process alive via Bun's active server handle
+    return;
+  }
+
+  if (args.command === "mcp") {
+    const dog = await YardDog.create({ workdir: args.workdir });
+    const servers = Object.keys(dog.config.mcpServers ?? {});
+    if (servers.length === 0) {
+      console.log('No MCP servers configured. Add to .yarddog/config.json:');
+      console.log('  "mcpServers": { "fetch": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-fetch"] } }');
+      return;
+    }
+    console.log("Connecting MCP servers…");
+    const tools = await dog.mcp.listTools();
+    for (const s of dog.mcp.status()) {
+      console.log(`  ${s.connected ? "●" : "✗"} ${s.name}`);
+    }
+    console.log(`\n${tools.length} tool(s) available:\n`);
+    for (const t of tools) {
+      console.log(`  ${t.prefixedName.padEnd(44)} ${(t.description ?? "").slice(0, 60)}`);
+    }
+    await dog.mcp.shutdown();
     return;
   }
 
