@@ -1,15 +1,11 @@
 # YardDog
+<p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/lockup.png" width=600 height=400>
 
-```
- ██╗   ██╗ █████╗ ██████╗ ██████╗
- ██║   ██║██╔══██╝██╔══██╗██╔══██╗   multi-agent orchestration harness
- ██║   ██║███████║██████╔╝██║  ██║        built on ModelHitch
- ╚██╗ ██╔╝██╔══██║██╔══██╗██║  ██║
-  ╚████╔╝ ██║  ██║██║  ██║██████╔╝
-   ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝
-```
 
-YardDog is a no-nonsense multi-agent orchestration harness built directly on top of [ModelHitch](https://www.npmjs.com/package/modelhitch). Built for the unglamorous grunt work, it shuttles context, wrangles code, and hauls documentation across models like a terminal spotter truck moving freight. No bloated enterprise fluff — just raw, mechanical muscle to hitch up tasks and keep your agent fleet in gear.
+YardDog is a multi-agent orchestration harness built directly on top of [ModelHitch](https://www.npmjs.com/package/modelhitch). Built for the unglamorous grunt work, it shuttles context, wrangles code, and hauls documentation across models like a terminal spotter truck moving freight. No bloated enterprise fluff — just raw, mechanical muscle to hitch up tasks and keep your agent fleet in gear.
+
+## TL;DR
+<p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/infograph.png" width=600 height=400>
 
 ## The idea
 
@@ -128,7 +124,7 @@ Every agent — house or temp — works under the same authority line:
 6. Anything not confidently classifiable as in-scope
 
 ## Run it
-
+ 
 Not published to npm yet — `npx yarddog` will 404. Three honest ways to get the command:
 
 ```bash
