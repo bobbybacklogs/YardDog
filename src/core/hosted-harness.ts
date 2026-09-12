@@ -8,7 +8,6 @@
 
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { jsonSchema, stepCountIs, streamText, tool } from "ai";
 import { parseReply } from "./directives";
 import { buildSystemPrompt, historyToMessages } from "./prompts";
 import { Store, type HarnessConfig } from "./store";
@@ -18,12 +17,12 @@ import { applyMemory } from "./memory";
 import { Computer } from "../workspace/computer";
 import {
   AiSdkAdapter,
-  getLaneModel,
-  resolveModelLane,
   type ChatMessage,
-  type ModelLane,
-  type TurnUsage,
 } from "../model";
+import {
+  defaultModelTurn,
+  type ModelTurn,
+} from "./model-turn";
 import type {
   AgentDef,
   Consult,
@@ -47,21 +46,7 @@ export interface HostedYardDogOptions {
   runModelTurn?: HostedModelTurn;
 }
 
-export type HostedModelTurn = (args: {
-  agent: AgentDef;
-  messages: ChatMessage[];
-  toolNames: string[];
-  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
-  maxTurns: number;
-  onDelta?: (text: string) => void;
-  onTool?: (name: string, args: Record<string, unknown>) => void;
-}) => Promise<{
-  text: string;
-  modelId?: string;
-  lane?: ModelLane;
-  usage?: TurnUsage;
-  turns?: number;
-}>;
+export type HostedModelTurn = ModelTurn;
 
 const MAX_CONSULTS_PER_JOB = 4;
 
@@ -103,7 +88,7 @@ export class HostedYardDog extends EventEmitter {
     await store.saveConfig(config);
 
     const adapter = options.adapter ?? new AiSdkAdapter();
-    const runModelTurn = options.runModelTurn ?? defaultHostedModelTurn(adapter);
+    const runModelTurn = options.runModelTurn ?? defaultModelTurn(adapter);
 
     const dog = new HostedYardDog(store, config, adapter, runModelTurn);
     const existingCrew = await store.loadCrew();
@@ -482,111 +467,4 @@ export class HostedYardDog extends EventEmitter {
   private emitEvent(event: YardDogEvent): void {
     this.emit("event", event);
   }
-}
-
-function defaultHostedModelTurn(adapter: AiSdkAdapter): HostedModelTurn {
-  return async ({
-    agent,
-    messages,
-    toolNames,
-    executeTool,
-    maxTurns,
-    onDelta,
-    onTool,
-  }) => {
-    if (toolNames.length === 0) {
-      let text = "";
-      let modelId: string | undefined;
-      let lane: ModelLane | undefined;
-      let usage: TurnUsage | undefined;
-      for await (const chunk of adapter.streamTurn({
-        messages,
-        role: agent.tag,
-        temperature: agent.temperature,
-      })) {
-        if (chunk.type === "lane") {
-          lane = chunk.lane;
-          modelId = chunk.modelId;
-        } else if (chunk.type === "text-delta") {
-          text += chunk.text;
-          onDelta?.(chunk.text);
-        } else if (chunk.type === "finish") {
-          text = chunk.text || text;
-          modelId = chunk.modelId;
-          lane = chunk.lane;
-          usage = chunk.usage;
-        } else if (chunk.type === "error") {
-          throw new Error(chunk.error);
-        }
-      }
-      return { text, modelId, lane, usage, turns: 1 };
-    }
-
-    const prompt = messages
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join("\n");
-    const { lane } = resolveModelLane({ role: agent.tag, prompt });
-    const resolved = getLaneModel(lane, {});
-    const pool = resolved.modelPool;
-
-    const aiTools: Record<string, ReturnType<typeof tool>> = {};
-    for (const name of toolNames) {
-      const spec = TOOLS[name];
-      if (!spec) continue;
-      const parameters =
-        (spec.def as { parameters?: Record<string, unknown> }).parameters ??
-        ({ type: "object", properties: {} } as Record<string, unknown>);
-      aiTools[name] = tool({
-        description: spec.def.description ?? name,
-        inputSchema: jsonSchema(parameters),
-        execute: async (args) => {
-          const record = args as Record<string, unknown>;
-          onTool?.(name, record);
-          return executeTool(name, record);
-        },
-      });
-    }
-
-    let lastError: unknown;
-    for (let i = 0; i < pool.length; i++) {
-      const modelId = pool[i]!;
-      try {
-        const result = streamText({
-          model: modelId,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-          tools: aiTools,
-          temperature: agent.temperature,
-          stopWhen: stepCountIs(maxTurns),
-        });
-
-        let text = "";
-        for await (const delta of result.textStream) {
-          text += delta;
-          onDelta?.(delta);
-        }
-        const finalText = (await result.text) || text;
-        const usageRaw = await result.usage;
-        return {
-          text: finalText,
-          modelId,
-          lane,
-          usage: usageRaw
-            ? {
-                inputTokens: usageRaw.inputTokens,
-                outputTokens: usageRaw.outputTokens,
-                totalTokens: usageRaw.totalTokens,
-              }
-            : undefined,
-          turns: maxTurns,
-        };
-      } catch (err) {
-        lastError = err;
-        if (i === pool.length - 1) {
-          throw err instanceof Error ? err : new Error(String(err));
-        }
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
-  };
 }

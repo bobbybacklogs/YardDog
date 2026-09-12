@@ -100,7 +100,7 @@ describe("specToTempDef", () => {
     expect(notes.join("\n")).toContain("no yarddog equivalent for tools: web");
   });
 
-  test("vendor model declarations are ignored because ModelHitch owns routing", () => {
+  test("vendor model declarations are ignored because YardDog lanes own routing", () => {
     const fallback = specToTempDef(fakeSpec({ model: "sonnet" }));
     expect(fallback.notes.join("\n")).toContain('model "sonnet" ignored');
 

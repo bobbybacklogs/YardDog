@@ -110,7 +110,7 @@ Use \`shell\` for exploration and drafting; use write_file for deliverables the 
 }
 
 /**
- * Map thread history into ModelHitch messages. Each message is labeled with
+ * Map thread history into chat messages for the model turn. Each message is labeled with
  * its author so agents can tell crew members apart in the shared transcript.
  */
 export function historyToMessages(

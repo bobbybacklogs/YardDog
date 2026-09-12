@@ -16,15 +16,9 @@ describe("tui smoke", () => {
     const workdir = path.join(import.meta.dir, ".tmp-tui");
     await rm(workdir, { recursive: true, force: true });
     await mkdir(path.join(workdir, ".yarddog"), { recursive: true });
-    const modelHitchHome = path.join(workdir, ".modelhitch");
-    await mkdir(modelHitchHome, { recursive: true });
     await writeFile(
       path.join(workdir, ".yarddog", "config.json"),
       JSON.stringify({ maxDepth: 3, autoApproveTools: true }),
-    );
-    await writeFile(
-      path.join(modelHitchHome, "config.json"),
-      JSON.stringify({ version: 1, defaultProviderId: "mock", defaultModel: "mock-model" }),
     );
 
     const proc = Bun.spawn({
@@ -32,7 +26,7 @@ describe("tui smoke", () => {
       cwd: workdir,
       stdout: "ignore",
       stderr: "pipe",
-      env: { ...process.env, MODELHITCH_HOME: modelHitchHome, TERM: "dumb" },
+      env: { ...process.env, TERM: "dumb", AI_GATEWAY_API_KEY: process.env.AI_GATEWAY_API_KEY ?? "test-key" },
     });
 
     // Give it a generous window to mount the renderer and render initial state.

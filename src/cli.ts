@@ -10,7 +10,7 @@ import { YardDog } from "./core/harness";
  */
 
 function usage(): never {
-  console.log(`YardDog — multi-agent orchestration harness on ModelHitch
+  console.log(`YardDog — multi-agent orchestration harness on AI Gateway
 
 Usage:
   yarddog                Launch the terminal UI
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     const dog = await YardDog.create({ workdir: args.workdir });
     console.log("Crew roster:");
     for (const agent of dog.agents) {
-      console.log(`  @${agent.tag.padEnd(10)} ${agent.role}  [ModelHitch] tools=${agent.tools.join(",") || "none"}`);
+      console.log(`  @${agent.tag.padEnd(10)} ${agent.role}  [AI Gateway] tools=${agent.tools.join(",") || "none"}`);
     }
     return;
   }

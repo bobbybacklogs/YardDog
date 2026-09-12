@@ -74,5 +74,5 @@ npm run smoke-turn -- "Say hello from the yard"
 ## Out of scope (later phases)
 
 - Cursor Cloud `@delegate` tool
-- Removing ModelHitch from the Bun CLI harness
+- ModelHitch removed from the Bun CLI harness (Phase 3 complete)
 - Full MCP / hiring-hall parity on Eve

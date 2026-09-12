@@ -1,21 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { homedir } from "node:os";
-import path from "node:path";
 import {
-  MemoryKeyStore,
-  ModelHitch,
-  buildCatalogOptions,
-  buildCooldownFromConfig,
-  defaultConfigTemplate,
-  isModelHitchError,
-  policyFromConfig,
-  readConfigFile,
-  runToolLoop,
-  validateConfig,
-  type ModelMessage,
-  type ToolDefinition,
-} from "modelhitch";
+  AiSdkAdapter,
+  type ChatMessage,
+  type ModelLaneConfig,
+} from "../model";
+import {
+  defaultModelTurn,
+  type ModelTurn,
+  type ModelTurnToolDef,
+} from "./model-turn";
 import { parseReply } from "./directives";
 import { buildSystemPrompt, historyToMessages } from "./prompts";
 import { Store, type HarnessConfig } from "./store";
@@ -41,46 +35,25 @@ import type {
 export interface YardDogOptions {
   /** All tool operations and persistence are confined here. Default: cwd. */
   workdir?: string;
-  /** Preconfigured ModelHitch client. Intended for tests and embedding. */
-  modelHitch?: ModelHitch;
+  /** Prebuilt AI SDK adapter (tests / custom lane config). */
+  adapter?: AiSdkAdapter;
+  /** Inject the model turn (unit tests). */
+  runModelTurn?: ModelTurn;
+  /** Optional non-secret lane overrides (also loadable from .yarddog/config.json). */
+  laneConfig?: ModelLaneConfig;
 }
 
-async function createConfiguredModelHitch(onFailover: () => void): Promise<ModelHitch> {
-  const modelHitchHome = process.env.MODELHITCH_HOME ?? path.join(homedir(), ".modelhitch");
-  const configPath = path.join(modelHitchHome, "config.json");
-  const config = readConfigFile(configPath) ?? defaultConfigTemplate();
-  const { errors } = validateConfig(config);
-  if (errors.length > 0) {
-    throw new Error(`ModelHitch config ${configPath} is invalid:\n- ${errors.join("\n- ")}`);
-  }
-
-  const keystore = new MemoryKeyStore();
-  await Promise.all(
-    Object.entries(config.keys ?? {}).map(([providerId, apiKey]) =>
-      keystore.set(providerId, apiKey),
-    ),
-  );
-
-  return ModelHitch.create({
-    defaultProviderId: config.defaultProviderId,
-    defaultModel: config.defaultModel,
-    policy: policyFromConfig(config),
-    catalog: buildCatalogOptions(config),
-    cooldown: buildCooldownFromConfig(config),
-    keystore,
-    onFailover,
-  });
-}
 
 /**
  * YardDog — the orchestration engine.
  *
- * Owns one ModelHitch instance (all LLM traffic goes through it), the crew,
+ * Owns one AiSdkAdapter (all LLM traffic goes through AI Gateway lanes), the crew,
  * and the threads. Emits typed events so any frontend (TUI today, anything
  * else tomorrow) can render runs live.
  */
 export class YardDog extends EventEmitter {
-  readonly mh: ModelHitch;
+  readonly adapter: AiSdkAdapter;
+  private readonly runModelTurn: ModelTurn;
   readonly store: Store;
   config: HarnessConfig;
 
@@ -88,7 +61,7 @@ export class YardDog extends EventEmitter {
   private threads: Map<string, Thread> = new Map();
   private presence: Map<string, Presence> = new Map();
   private busy = false;
-  /** Shared counter bumped by ModelHitch on every lane switch. */
+  /** Shared counter bumped when the AI SDK lane pool fails over. */
   private readonly failoverCounter: { count: number };
   /** Per-job consult budget — resets at each send(). */
   private consultBudget = { remaining: 0 };
@@ -104,13 +77,15 @@ export class YardDog extends EventEmitter {
   private queuedJobs = 0;
 
   private constructor(
-    mh: ModelHitch,
     store: Store,
     config: HarnessConfig,
+    adapter: AiSdkAdapter,
+    runModelTurn: ModelTurn,
     failoverCounter: { count: number },
   ) {
     super();
-    this.mh = mh;
+    this.adapter = adapter;
+    this.runModelTurn = runModelTurn;
     this.store = store;
     this.config = config;
     this.failoverCounter = failoverCounter;
@@ -124,11 +99,15 @@ export class YardDog extends EventEmitter {
 
     const config = await store.loadConfig();
     const failoverCounter = { count: 0 };
-    const mh = options.modelHitch ?? await createConfiguredModelHitch(() => {
-      failoverCounter.count++;
-    });
 
-    const dog = new YardDog(mh, store, config, failoverCounter);
+    const laneConfig: ModelLaneConfig = {
+      ...(config.lanes ?? {}),
+      ...(options.laneConfig ?? {}),
+    };
+    const adapter = options.adapter ?? new AiSdkAdapter({ laneConfig });
+    const runModelTurn = options.runModelTurn ?? defaultModelTurn(adapter);
+
+    const dog = new YardDog(store, config, adapter, runModelTurn, failoverCounter);
     const existingCrew = await store.loadCrew();
     dog.crew = existingCrew ?? defaultCrew();
     if (!existingCrew) await store.saveCrew(dog.crew);
@@ -334,7 +313,7 @@ export class YardDog extends EventEmitter {
     // History snapshot excludes the input we're about to send; the caller
     // already appended user/handoff messages before invoking us.
     const systemPrompt = buildSystemPrompt(agent, this.crew, delegator);
-    const messages: ModelMessage[] = [
+    const messages: ChatMessage[] = [
       {
         role: "system",
         content: this.activeSkillInjection
@@ -349,74 +328,62 @@ export class YardDog extends EventEmitter {
     let meta: TurnMeta = {};
     const failoversAtStart = this.failoverCounter.count;
 
+    const ctx: ToolContext = {
+      workdir: this.store.workdir,
+      agentTag: agent.tag,
+      computer: agent.tools.includes("shell")
+        ? await this.computerFor(agent.tag)
+        : undefined,
+      remember: (mode, note) => this.writeMemory(agent, mode, note),
+    };
+
+    const toolNames = agent.tools.filter((n) => Boolean(TOOLS[n]));
+    const extraTools: ModelTurnToolDef[] = [];
+    const mcpTools = await this.mcp.listTools();
+    for (const t of mcpTools) {
+      extraTools.push({
+        name: t.prefixedName,
+        description: `[MCP:${t.server}] ${t.description ?? t.name}`,
+        parameters: t.inputSchema as Record<string, unknown>,
+      });
+    }
+
     try {
-      const specs = agent.tools
-        .map((name) => TOOLS[name])
-        .filter((s): s is NonNullable<typeof s> => Boolean(s));
-      const tools: ToolDefinition[] = specs.map((s) => s.def);
-
-      // MCP floor: discovered server tools ride along with local tools —
-      // every crew member can reach them, gated like any heavy tool.
-      const mcpTools = await this.mcp.listTools();
-      for (const t of mcpTools) {
-        tools.push({
-          name: t.prefixedName,
-          description: `[MCP:${t.server}] ${t.description ?? t.name}`,
-          parameters: t.inputSchema,
-        });
-      }
-
-      const ctx: ToolContext = {
-        workdir: this.store.workdir,
-        agentTag: agent.tag,
-        computer: agent.tools.includes("shell")
-          ? await this.computerFor(agent.tag)
-          : undefined,
-        remember: (mode, note) => this.writeMemory(agent, mode, note),
+      const result = await this.runModelTurn({
+        agent,
+        messages,
+        toolNames,
+        extraTools,
+        executeTool: (name, args) =>
+          name.startsWith("mcp__")
+            ? this.executeMcpTool(agent, name, args)
+            : this.executeTool(agent, name, args, ctx),
+        maxTurns: agent.maxTurns ?? 8,
+        onDelta: (delta) => {
+          this.emitEvent({ type: "delta", threadId, agentTag: agent.tag, text: delta });
+        },
+        onTool: (name, args) => {
+          this.emitEvent({ type: "tool", threadId, agentTag: agent.tag, name, args });
+        },
+        onFailover: () => {
+          this.failoverCounter.count++;
+        },
+      });
+      text = result.text;
+      meta = {
+        servedModel: result.modelId,
+        turns: result.turns,
+        usage: result.usage as TurnMeta["usage"],
+        failedOver: result.failedOver || this.failoverCounter.count > failoversAtStart,
       };
-
-      if (tools.length === 0) {
-        // ModelHitch selects the primary and fails over before the first chunk.
-        const stream = await this.mh.stream({
-          messages,
-          temperature: agent.temperature,
-        });
-        for await (const chunk of stream) {
-          if (chunk.type === "text-delta") {
-            text += chunk.text;
-            this.emitEvent({ type: "delta", threadId, agentTag: agent.tag, text: chunk.text });
-          } else if (chunk.type === "finish") {
-            meta.usage = chunk.usage;
-          }
-        }
-      } else {
-        for await (const ev of runToolLoop(this.mh, { messages, tools, temperature: agent.temperature }, (name, args) => (name.startsWith("mcp__") ? this.executeMcpTool(agent, name, args) : this.executeTool(agent, name, args, ctx)), { maxTurns: agent.maxTurns ?? 8 })) {
-          if (ev.type === "chunk" && ev.chunk.type === "text-delta") {
-            this.emitEvent({ type: "delta", threadId, agentTag: agent.tag, text: ev.chunk.text });
-          } else if (ev.type === "tool") {
-            this.emitEvent({
-              type: "tool",
-              threadId,
-              agentTag: agent.tag,
-              name: ev.call.name,
-              args: ev.call.arguments,
-            });
-          } else if (ev.type === "done") {
-            text = ev.messages.filter((m) => m.role === "assistant").at(-1)?.content as string ?? "";
-            meta = { turns: ev.turns, usage: ev.usage };
-          }
-        }
-      }
     } catch (err) {
-      const detail = isModelHitchError(err)
-        ? `model error [${err.code}]: ${err.message}`
-        : (err as Error).message;
+      const detail = (err as Error).message;
       this.setPresence(agent.tag, "error");
       this.emitEvent({ type: "error", threadId, agentTag: agent.tag, error: detail });
       return this.recordTurn(thread, agent, `⚠ ${detail}`, depth, {});
     }
 
-    meta.failedOver = this.failoverCounter.count > failoversAtStart;
+    meta.failedOver = Boolean(meta.failedOver) || this.failoverCounter.count > failoversAtStart;
 
     // Consult-answer turns skip directive parsing: an answer is an answer,
     // not a delegation opportunity (keeps consult chains from compounding).

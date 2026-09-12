@@ -19,7 +19,18 @@ export interface HarnessConfig {
    * Tool names surface as mcp__<server>__<tool> and ride the approval gate.
    */
   mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
+  /**
+   * Optional non-secret AI Gateway lane overrides (pools / preferred models).
+   * API keys stay in env: AI_GATEWAY_API_KEY / VERCEL_OIDC_TOKEN.
+   */
+  lanes?: {
+    highPool?: string[];
+    fastPool?: string[];
+    highModel?: string;
+    fastModel?: string;
+  };
 }
+
 
 export const DEFAULT_CONFIG: HarnessConfig = {
   maxDepth: 3,

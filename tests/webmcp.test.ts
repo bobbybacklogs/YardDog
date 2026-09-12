@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ModelHitch } from "modelhitch";
 import { YardDog } from "../src/core/harness";
 import { startServe } from "../src/serve";
 
@@ -17,7 +16,11 @@ beforeAll(async () => {
   );
   const dog = await YardDog.create({
     workdir,
-    modelHitch: new ModelHitch({ defaultProviderId: "mock", defaultModel: "mock-model" }),
+    runModelTurn: async ({ agent }) => ({
+      text: `(${agent.tag} webmcp ack)`,
+      modelId: "test-model",
+      lane: "fast",
+    }),
   });
   server = startServe(dog, { port: 0 }); // random free port
 });

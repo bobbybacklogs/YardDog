@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { ToolDefinition } from "modelhitch";
+/** Local tool definition — AI SDK / YardDog owned (no ModelHitch). */
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+}
+
 import type { Computer } from "../workspace/computer";
 
 /**

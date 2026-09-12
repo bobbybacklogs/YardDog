@@ -1,7 +1,7 @@
 {
   "name": "yarddog",
   "version": "0.1.0",
-  "description": "No-nonsense multi-agent orchestration harness built directly on top of ModelHitch.",
+  "description": "No-nonsense multi-agent orchestration harness on Vercel AI SDK + AI Gateway.",
   "type": "module",
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -36,7 +36,6 @@
     "@opentui/core": "^0.1.28",
     "ai": "^7.0.99",
     "just-bash": "^3.4.2",
-    "modelhitch": "^0.15.0",
     "portage-cli": "^0.1.4",
     "skillswap": "^0.2.0",
     "smol-toml": "^1.8.0"

@@ -1,40 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ModelHitch, type Provider } from "modelhitch";
-import type { ChatParams, ChatResult, StreamChunk } from "modelhitch";
 import { YardDog } from "../src/core/harness";
 
-describe("ModelHitch routing ownership", () => {
-  test("YardDog leaves provider and model selection to ModelHitch", async () => {
+describe("YardDog lane ownership (Phase 3)", () => {
+  test("YardDog leaves provider/model off agents; lanes come from adapter turn", async () => {
     const seenModels: string[] = [];
-    const provider: Provider = {
-      id: "routing-owner",
-      name: "Routing owner",
-      defaultModel: "modelhitch-selected-model",
-      capabilities: { streaming: true, toolCalling: true, vision: false, embeddings: false },
-      async chat(params: ChatParams): Promise<ChatResult> {
-        seenModels.push(params.model);
-        return { message: { role: "assistant", content: "routed" }, finishReason: "stop" };
-      },
-      async *stream(params: ChatParams): AsyncGenerator<StreamChunk> {
-        seenModels.push(params.model);
-        yield { type: "text-delta", text: "routed" };
-        yield { type: "finish", finishReason: "stop" };
-      },
-    };
     const workdir = path.join(import.meta.dir, ".tmp-routing");
     await rm(workdir, { recursive: true, force: true });
     await mkdir(workdir, { recursive: true });
 
     const dog = await YardDog.create({
       workdir,
-      modelHitch: new ModelHitch({ providers: [provider], defaultProviderId: provider.id }),
+      runModelTurn: async ({ agent }) => {
+        seenModels.push("yarddog-lane-model");
+        return { text: `routed by ${agent.tag}`, modelId: "yarddog-lane-model", lane: "fast" };
+      },
     });
     const thread = dog.createThread("routing test");
     await dog.send(thread.id, "who owns the lane?");
 
-    expect(seenModels).toEqual(["modelhitch-selected-model"]);
+    expect(seenModels).toEqual(["yarddog-lane-model"]);
     expect(dog.agents.every((agent) => !("provider" in agent) && !("model" in agent))).toBe(true);
     const yardDogConfig = JSON.parse(
       await readFile(path.join(workdir, ".yarddog", "config.json"), "utf8"),
@@ -43,57 +29,34 @@ describe("ModelHitch routing ownership", () => {
     expect(yardDogConfig).not.toHaveProperty("model");
   });
 
-  test("ModelHitch skips a tool-incapable primary for YardDog agent turns", async () => {
-    let incapableCalls = 0;
-    let capableCalls = 0;
-    const incapable: Provider = {
-      id: "no-tools",
-      name: "No tools",
-      defaultModel: "no-tools-model",
-      capabilities: { streaming: true, toolCalling: false, vision: false, embeddings: false },
-      async chat(): Promise<ChatResult> {
-        incapableCalls++;
-        return { message: { role: "assistant", content: "wrong lane" }, finishReason: "stop" };
-      },
-      async *stream(): AsyncGenerator<StreamChunk> {
-        incapableCalls++;
-        yield { type: "text-delta", text: "wrong lane" };
-        yield { type: "finish", finishReason: "stop" };
-      },
-    };
-    const capable: Provider = {
-      id: "has-tools",
-      name: "Has tools",
-      defaultModel: "has-tools-model",
-      capabilities: { streaming: true, toolCalling: true, vision: false, embeddings: false },
-      async chat(): Promise<ChatResult> {
-        capableCalls++;
-        return { message: { role: "assistant", content: "capable lane" }, finishReason: "stop" };
-      },
-      async *stream(): AsyncGenerator<StreamChunk> {
-        capableCalls++;
-        yield { type: "text-delta", text: "capable lane" };
-        yield { type: "finish", finishReason: "stop" };
-      },
-    };
+  test("lane pool failover is reported via onFailover / failedOver meta", async () => {
     const workdir = path.join(import.meta.dir, ".tmp-capability-routing");
     await rm(workdir, { recursive: true, force: true });
     await mkdir(workdir, { recursive: true });
+
+    let attempts = 0;
     const dog = await YardDog.create({
       workdir,
-      modelHitch: new ModelHitch({
-        providers: [incapable, capable],
-        defaultProviderId: incapable.id,
-        autoMode: { lanes: [{ providerId: capable.id, model: capable.defaultModel }] },
-      }),
+      runModelTurn: async ({ onFailover }) => {
+        attempts++;
+        if (attempts === 1) {
+          onFailover?.();
+          return {
+            text: "served via failover lane",
+            modelId: "fast-fallback",
+            lane: "fast",
+            failedOver: true,
+          };
+        }
+        return { text: "ok", modelId: "fast-primary", lane: "fast" };
+      },
     });
-    const thread = dog.createThread("capability routing test");
-
+    const thread = dog.createThread("failover routing test");
     await dog.send(thread.id, "use the capable lane");
 
-    expect(incapableCalls).toBe(0);
-    expect(capableCalls).toBe(1);
-    expect(thread.messages.some((message) => message.text === "capable lane")).toBe(true);
+    expect(attempts).toBe(1);
+    expect(thread.messages.some((m) => m.text === "served via failover lane")).toBe(true);
+    expect(thread.messages.some((m) => m.meta?.failedOver === true)).toBe(true);
   });
 
   test("legacy YardDog lane fields are removed from persisted state", async () => {
@@ -111,8 +74,10 @@ describe("ModelHitch routing ownership", () => {
       }),
     );
 
-    const modelHitch = new ModelHitch({ defaultProviderId: "mock", defaultModel: "mock-model" });
-    const first = await YardDog.create({ workdir, modelHitch });
+    const first = await YardDog.create({
+      workdir,
+      runModelTurn: async () => ({ text: "noop", modelId: "t", lane: "fast" }),
+    });
     const legacyCrew = first.agents.map((agent) => ({
       ...agent,
       provider: "opencode-zen",
@@ -120,7 +85,10 @@ describe("ModelHitch routing ownership", () => {
     }));
     await writeFile(path.join(yardDogDir, "agents.json"), JSON.stringify(legacyCrew));
 
-    await YardDog.create({ workdir, modelHitch });
+    await YardDog.create({
+      workdir,
+      runModelTurn: async () => ({ text: "noop", modelId: "t", lane: "fast" }),
+    });
 
     const config = JSON.parse(await readFile(path.join(yardDogDir, "config.json"), "utf8"));
     const crew = JSON.parse(await readFile(path.join(yardDogDir, "agents.json"), "utf8"));
