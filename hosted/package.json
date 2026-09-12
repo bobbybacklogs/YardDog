@@ -1,0 +1,32 @@
+{
+  "name": "yarddog-hosted",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Eve-hosted YardDog runtime (preferred deploy). Phase 2 — crew directives via HostedYardDog + AI Gateway (no ModelHitch).",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "imports": {
+    "#*": "./agent/*"
+  },
+  "scripts": {
+    "dev": "eve dev",
+    "build": "eve build",
+    "start": "eve start",
+    "deploy": "eve deploy",
+    "typecheck": "tsc --noEmit",
+    "smoke-turn": "node --import tsx ./scripts/smoke-turn.ts",
+    "smoke-directives": "node --import tsx ./scripts/smoke-directives.ts"
+  },
+  "dependencies": {
+    "ai": "^7.0.99",
+    "eve": "^0.54.3",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -110,7 +110,7 @@ export function specToTempDef(spec: AgentSpec): HireResult {
   }
 
   if (spec.model && spec.model !== "inherit") {
-    notes.push(`model "${spec.model}" ignored — ModelHitch owns routing`);
+    notes.push(`model "${spec.model}" ignored — YardDog AI Gateway lanes own routing`);
   }
 
   return {

@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { ToolDefinition } from "modelhitch";
+/** Local tool definition — AI SDK / YardDog owned (no ModelHitch). */
+export interface ToolDefinition {
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+}
+
 import type { Computer } from "../workspace/computer";
 
 /**
@@ -22,6 +28,10 @@ export interface ToolContext {
   computer?: Computer;
   /** Durable-memory writer; present for the `remember` tool. */
   remember?: (mode: "append" | "replace", note: string) => Promise<string>;
+  /** Cursor Cloud @delegate plane (always on the floor when configured). */
+  cursorPlane?: import("../cursor").CursorPlane;
+  /** Optional event sink so Cursor tool calls can stream into the harness. */
+  onCursorEvent?: (event: import("../cursor").CursorPlaneEvent) => void;
 }
 
 export interface ToolSpec {
@@ -268,6 +278,123 @@ const remember: ToolSpec = {
   },
 };
 
+
+/** Always-on Cursor Cloud worker tools (Phase 4). */
+export const CURSOR_TOOL_NAMES = [
+  "dispatch_cursor_job",
+  "cursor_job_status",
+  "cancel_cursor_job",
+] as const;
+
+const dispatch_cursor_job: ToolSpec = {
+  def: {
+    name: "dispatch_cursor_job",
+    description:
+      "Dispatch a Cursor Cloud agent (@cursorbay) for multi-file / PR / long jobs. Prefer this (or @delegate(to: @cursorbay, task: ...)) instead of doing heavy cloud work locally. Requires CURSOR_API_KEY.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Job for the Cursor Cloud agent" },
+        repo: { type: "string", description: "Optional GitHub repo URL" },
+        branch: { type: "string", description: "Optional starting git ref" },
+        autoCreatePR: { type: "boolean", description: "Open a PR when done (default true)" },
+        wait: {
+          type: "boolean",
+          description: "Wait for the run to finish (default true)",
+        },
+        tag: {
+          type: "string",
+          description: "Roster tag (default cursorbay)",
+        },
+      },
+      required: ["task"],
+    },
+  },
+  async execute(args, ctx) {
+    if (!ctx.cursorPlane) {
+      return 'error: Cursor plane not configured (set CURSOR_API_KEY or CURSOR_API_KEY)';
+    }
+    if (!ctx.cursorPlane.ready) {
+      return "error: CURSOR_API_KEY (or CURSOR_API_KEY) is not set";
+    }
+    const task = String(args.task ?? "").trim();
+    if (!task) return "error: task is required";
+    const repo = typeof args.repo === "string" ? args.repo.trim() : "";
+    const branch = typeof args.branch === "string" ? args.branch.trim() : undefined;
+    const tag = typeof args.tag === "string" ? args.tag : undefined;
+    const wait = args.wait === false ? false : true;
+    const autoCreatePR = args.autoCreatePR === false ? false : true;
+    const job = await ctx.cursorPlane.dispatch(
+      {
+        task,
+        tag,
+        wait,
+        autoCreatePR,
+        repos: repo ? [{ url: repo, startingRef: branch }] : undefined,
+      },
+      ctx.onCursorEvent,
+    );
+    return JSON.stringify(
+      {
+        id: job.id,
+        tag: job.tag,
+        status: job.status,
+        text: job.text?.slice(0, 4000),
+        prUrl: job.prUrl,
+        branch: job.branch,
+        error: job.error,
+      },
+      null,
+      2,
+    );
+  },
+};
+
+const cursor_job_status: ToolSpec = {
+  def: {
+    name: "cursor_job_status",
+    description: "Check status of a Cursor Cloud job by id or roster tag (e.g. cursorbay).",
+    parameters: {
+      type: "object",
+      properties: {
+        idOrTag: { type: "string", description: "Job id (bc-…) or tag (cursorbay)" },
+      },
+      required: ["idOrTag"],
+    },
+  },
+  async execute(args, ctx) {
+    if (!ctx.cursorPlane) return "error: Cursor plane not configured";
+    const idOrTag = String(args.idOrTag ?? "").trim();
+    if (!idOrTag) return "error: idOrTag is required";
+    const job = await ctx.cursorPlane.status(idOrTag);
+    if (!job) return `error: unknown Cursor job "${idOrTag}"`;
+    return JSON.stringify(job, null, 2);
+  },
+};
+
+const cancel_cursor_job: ToolSpec = {
+  def: {
+    name: "cancel_cursor_job",
+    description: "Cancel a running Cursor Cloud job by id or roster tag.",
+    parameters: {
+      type: "object",
+      properties: {
+        idOrTag: { type: "string", description: "Job id (bc-…) or tag (cursorbay)" },
+      },
+      required: ["idOrTag"],
+    },
+  },
+  async execute(args, ctx) {
+    if (!ctx.cursorPlane) return "error: Cursor plane not configured";
+    const idOrTag = String(args.idOrTag ?? "").trim();
+    if (!idOrTag) return "error: idOrTag is required";
+    const job = await ctx.cursorPlane.cancel(idOrTag);
+    if (!job) return `error: unknown Cursor job "${idOrTag}"`;
+    return JSON.stringify(job, null, 2);
+  },
+};
+
+
 export const TOOLS: Record<string, ToolSpec> = {
   read_file,
   write_file,
@@ -276,11 +403,14 @@ export const TOOLS: Record<string, ToolSpec> = {
   run_shell,
   shell,
   remember,
+  dispatch_cursor_job,
+  cursor_job_status,
+  cancel_cursor_job,
 };
 
 /** Tools that never need human approval. The sandboxed shell counts as safe:
  *  writes are confined to the agent's own home under .yarddog/workspaces/. */
-const SAFE_TOOLS = new Set(["read_file", "list_files", "grep", "shell", "remember"]);
+const SAFE_TOOLS = new Set(["read_file", "list_files", "grep", "shell", "remember", "cursor_job_status"]);
 
 export function needsApproval(name: string): boolean {
   return !SAFE_TOOLS.has(name);

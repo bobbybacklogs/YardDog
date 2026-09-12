@@ -1,11 +1,11 @@
-import type { Usage } from "modelhitch";
+import type { TurnUsage } from "../model";
 
 /** Lifecycle state of an agent, surfaced in the TUI fleet view. */
 export type Presence = "idle" | "working" | "handoff" | "escalated" | "error";
 
 /**
  * A YardDog agent definition. Pure data — JSON-safe, persisted as-is.
- * ModelHitch exclusively owns provider/model routing for every agent.
+ * YardDog AI Gateway lanes own provider/model routing for every agent.
  */
 export interface AgentDef {
   id: string;
@@ -52,7 +52,7 @@ export interface TurnMeta {
   servedProvider?: string;
   servedModel?: string;
   turns?: number;
-  usage?: Usage;
+  usage?: TurnUsage;
   failedOver?: boolean;
 }
 

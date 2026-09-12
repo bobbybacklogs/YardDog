@@ -9,6 +9,11 @@
 
 // ── core ──────────────────────────────────────────────────────────
 export { YardDog } from "./core/harness";
+export {
+  HostedYardDog,
+  type HostedYardDogOptions,
+  type HostedModelTurn,
+} from "./core/hosted-harness";
 export { Store } from "./core/store";
 export { Computer } from "./workspace/computer";
 export { McpManager, type McpServerConfig } from "./mcp/host";
@@ -35,3 +40,40 @@ export type {
 // Re-export config + hall types for downstream convenience
 export type { HarnessConfig } from "./core/store";
 export type { HireResult, TempListing } from "./core/hall";
+
+// ── model plane (AI SDK + AI Gateway; no ModelHitch on this path) ─
+export {
+  AiSdkAdapter,
+  DEFAULT_FAST_POOL,
+  DEFAULT_HIGH_POOL,
+  getLaneModel,
+  getLaneModelPool,
+  isRestrictionError,
+  resolveModelLane,
+} from "./model";
+export type {
+  ChatMessage,
+  ModelLane,
+  ModelLaneConfig,
+  ResolvedLaneModel,
+  StreamTurnOptions,
+  TaskComplexity,
+  TurnChunk,
+  TurnUsage,
+} from "./model";
+
+// ── Cursor @delegate plane (Phase 4) ──────────────────────────────
+export {
+  CURSOR_BAY_TAG,
+  CursorPlane,
+  isCursorDelegateTag,
+} from "./cursor";
+export type {
+  CreateCursorAgent,
+  CursorDispatchRequest,
+  CursorJob,
+  CursorJobStatus,
+  CursorPlaneEvent,
+  CursorPlaneOptions,
+  CursorRepoRef,
+} from "./cursor";

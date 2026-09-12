@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ModelHitch } from "modelhitch";
 import { YardDog } from "../src/core/harness";
 
 async function makeDog(): Promise<YardDog> {
@@ -13,7 +12,11 @@ async function makeDog(): Promise<YardDog> {
   );
   return YardDog.create({
     workdir,
-    modelHitch: new ModelHitch({ defaultProviderId: "mock", defaultModel: "mock-model" }),
+    runModelTurn: async ({ agent }) => ({
+      text: `(${agent.tag} ack)`,
+      modelId: "test-model",
+      lane: "fast",
+    }),
   });
 }
 
@@ -22,16 +25,14 @@ describe("job queue", () => {
     const dog = await makeDog();
     const thread = dog.createThread("queue test");
 
-    // Fire two jobs without awaiting the first.
     const p1 = dog.send(thread.id, "job one");
     const p2 = dog.send(thread.id, "job two");
-    expect(dog.pending).toBeGreaterThanOrEqual(0); // counter is live
+    expect(dog.pending).toBeGreaterThanOrEqual(0);
 
     await Promise.all([p1, p2]);
 
     const userMsgs = thread.messages.filter((m) => m.from === "user");
     expect(userMsgs.map((m) => m.text)).toEqual(["job one", "job two"]);
-    // every job got a reply
     expect(thread.messages.filter((m) => m.from !== "user").length).toBe(2);
     expect(dog.working).toBe(false);
   });

@@ -2,7 +2,23 @@
 <p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/lockup.png" width=600 height=400>
 
 
-YardDog is a multi-agent orchestration harness built directly on top of [ModelHitch](https://www.npmjs.com/package/modelhitch). Built for the unglamorous grunt work, it shuttles context, wrangles code, and hauls documentation across models like a terminal spotter truck moving freight. No bloated enterprise fluff — just raw, mechanical muscle to hitch up tasks and keep your agent fleet in gear.
+YardDog is a multi-agent orchestration harness powered by **Vercel AI SDK + AI Gateway** (YardDog-owned lanes). Built for the unglamorous grunt work, it shuttles context, wrangles code, and hauls documentation across models like a terminal spotter truck moving freight. No bloated enterprise fluff — just raw, mechanical muscle to hitch up tasks and keep your agent fleet in gear.
+
+## Hosted runtime (Eve + AI SDK — preferred)
+
+Preferred deploy plane is the Eve app under [`hosted/`](./hosted). Model turns go through **Vercel AI Gateway** via YardDog-owned `src/model` (`AiSdkAdapter` + lanes) — **not AI Gateway lanes**. Phase 2 adds `HostedYardDog` so `@delegate` / `@consult` / `@escalate`, tools, approval, and memory run hosted.
+
+```bash
+# Node.js 24+ required for Eve
+cd hosted
+cp .env.example .env.local   # set AI_GATEWAY_API_KEY
+npm install
+npm run dev                       # Eve session — use yarddog_send for crew jobs
+npm run smoke-directives          # scripted directive smoke (no key)
+npm run smoke-turn -- "hi"        # one AiSdkAdapter turn
+```
+
+See [`hosted/README.md`](./hosted/README.md). Bun CLI/OpenTUI use the same AI Gateway model plane as the hosted Eve app.
 
 ## TL;DR
 <p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/infograph.png" width=600 height=400>
@@ -15,7 +31,7 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 - **They page you only for judgment calls.** `@escalate(question)` stops the chain and flags a human.
 - **Everyone sees the shared thread.** Agents read the transcript labeled by author tag — no copy-pasting notes between chats.
 - **They remember.** Per-agent durable memory notes are injected into every turn, across sessions.
-- **Every wheel rolls through ModelHitch.** One instance, ModelHitch-owned provider/model policy, BYOK keys, automatic 429/5xx failover, and honest telemetry (`served via failover lane`, token counts).
+- **Every wheel rolls through YardDog lanes.** AI Gateway pools with restriction failover, env-based keys (`AI_GATEWAY_API_KEY`), and honest telemetry (served model, failover, token counts).
 
 ## The default crew
 
@@ -26,7 +42,19 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 | `@spotter` | Scout — read-only codebase reconnaissance | read/list/grep |
 | `@mule` | Docs hauler — READMEs, guides, changelogs | read/write/list/grep |
 
-Edit `.yarddog/agents.json` to adjust prompts, memory, or add crew members. Provider and model routing is never stored on agents; every turn follows ModelHitch's configuration in `~/.modelhitch/config.json` (or `$MODELHITCH_HOME/config.json`).
+Edit `.yarddog/agents.json` to adjust prompts, memory, or add crew members. Provider and model routing is never stored on agents; every turn follows AI Gateway lanes's configuration in `~/.ai-gateway/config.json` (or `$AI_GATEWAY_API_KEY/config.json`).
+
+## Cursor Cloud @delegate
+
+Any crew member (and hired temps) can dispatch Cursor Cloud agents:
+
+```text
+@delegate(to: @cursorbay, task: fix auth and open a PR)
+```
+
+Or call the always-on tool `dispatch_cursor_job`. Status/cancel via `cursor_job_status` / `cancel_cursor_job`.
+
+Requires `CURSOR_API_KEY`. Prefer Cursor for multi-file / PR / long jobs; light turns stay on AI Gateway lanes.
 
 ## The hiring hall
 
@@ -42,7 +70,7 @@ yarddog tui --hire "Chrome Extension Reviewer,Final Validator"
 - **Temps ride the A2A protocol for free**: once hired, they appear in every agent's team roster, so `@foreman` can `@delegate` or be consulted by them with zero configuration.
 - **Session-scoped**: temps are never written to `.yarddog/agents.json` — when the session ends, they clock out.
 - **Honest receipts**: vendor tool names (`read`, `search`, `web`, `vscode/*`) are mapped onto YardDog's real tools; anything without an equivalent is dropped and noted, never faked.
-- **Model declarations**: imported agent model hints are ignored with a receipt note. ModelHitch remains the only routing authority.
+- **Model declarations**: imported agent model hints are ignored with a receipt note. AI Gateway lanes remains the only routing authority.
 
 ## The skill library
 
@@ -161,7 +189,7 @@ Everything lives under `<workdir>/.yarddog/`:
 └─ threads/<id>.json
 ```
 
-Delete it for a fresh yard. Model routing and credentials remain in ModelHitch's own configuration, managed with `modelhitch settings`.
+Delete it for a fresh yard. Model routing and credentials remain in AI Gateway lanes's own configuration, managed with `ai-gateway settings`.
 
 ## Architecture
 
@@ -170,7 +198,7 @@ src/
 ├─ cli.ts               entry: tui | ask | crew | temps | hire | fire | threads | skills
 ├─ core/
 │  ├─ types.ts          AgentDef, ThreadMessage, events — pure JSON-safe data
-│  ├─ harness.ts        YardDog engine: one ModelHitch, crew, threads,
+│  ├─ harness.ts        YardDog engine: one AI Gateway lanes, crew, threads,
 │  │                    send() → agent turns → directive execution loop
 │  ├─ directives.ts     @delegate / @consult / @escalate parse + strip
 │  ├─ prompts.ts        persona ⊕ memory ⊕ team roster ⊕ ground rules
@@ -206,7 +234,7 @@ Rules enforced by the harness (not just the prompt): max one delegate per reply,
 ## Requirements
 
 - [Bun](https://bun.sh) ≥ 1.2
-- Node.js is *not* required at runtime; ModelHitch's bridge features (not used here) need Node 22.5+
+- Node.js is *not* required at runtime; AI Gateway lanes's bridge features (not used here) need Node 22.5+
 - API keys via environment variables or `.env` (`OPENCODE_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …). Use `mock/mock-model` as a provider to run the whole pipeline with zero keys.
 
 ```bash

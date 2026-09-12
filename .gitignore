@@ -138,6 +138,14 @@ dist
 # YardDog runtime state (crew, threads, config)
 .yarddog/
 
+# Eve hosted runtime
+hosted/node_modules/
+hosted/.eve/
+hosted/.output/
+hosted/.env
+hosted/.env.local
+hosted/dist/
+
 # Compiled single-file executables
 bin/yarddog
 bin/yarddog.exe
