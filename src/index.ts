@@ -9,6 +9,11 @@
 
 // ── core ──────────────────────────────────────────────────────────
 export { YardDog } from "./core/harness";
+export {
+  HostedYardDog,
+  type HostedYardDogOptions,
+  type HostedModelTurn,
+} from "./core/hosted-harness";
 export { Store } from "./core/store";
 export { Computer } from "./workspace/computer";
 export { McpManager, type McpServerConfig } from "./mcp/host";

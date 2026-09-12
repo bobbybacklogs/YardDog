@@ -27,7 +27,9 @@
     "build": "bun build src/cli.ts --compile --outfile bin/yarddog",
     "install:global": "bun run build && bun link",
     "hosted:dev": "npm --prefix hosted run dev",
-    "hosted:smoke": "npm --prefix hosted run smoke-turn"
+    "hosted:smoke": "npm --prefix hosted run smoke-turn",
+    "hosted:directives": "npm --prefix hosted run smoke-directives",
+    "test:hosted": "bun test tests/hosted-harness.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

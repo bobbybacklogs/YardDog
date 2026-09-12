@@ -1,16 +1,15 @@
 # YardDog hosted (Eve)
 
-Eve-hosted YardDog runtime — **preferred deploy plane** (Phase 1 scaffold).
+Eve-hosted YardDog runtime — **preferred deploy plane**.
 
-## What this is
+## Phases
 
-| Piece | Role |
-| --- | --- |
-| `agent/` | Eve agent (instructions, tools, future crew subagents) |
-| `agent/tools/yarddog_gateway_turn.ts` | One turn via YardDog-owned `AiSdkAdapter` + lanes (AI Gateway) |
-| `../src/model/` | YardDog-owned AI SDK adapter / lanes (not ModelHitch, not a GW shared package) |
+| Phase | Status | What |
+| --- | --- | --- |
+| 1 | Done | Eve scaffold + YardDog-owned `AiSdkAdapter` / lanes + one Gateway turn |
+| 2 | This PR | Hosted harness: crew, `@delegate` / `@consult` / `@escalate`, tools, approval, memory |
 
-ModelHitch is **not** on this happy path.
+ModelHitch is **not** on the hosted happy path.
 
 ## Prerequisites
 
@@ -28,15 +27,26 @@ cp hosted/.env.example hosted/.env.local
 ```bash
 cd hosted
 npm install
-npm run dev          # Eve interactive session (Gateway model on defineAgent)
+npm run dev          # Eve interactive session
 ```
 
-In the Eve session, ask anything — or ask the agent to call `yarddog_gateway_turn` for an explicit YardDog adapter turn.
+### Crew job (Phase 2)
 
-### Smoke one adapter turn (no Eve TUI)
+In the Eve session, ask YardDog to run a yard job — it should call **`yarddog_send`**, which runs `HostedYardDog` (directives + tools + memory).
+
+Or smoke without the TUI:
 
 ```bash
-cd hosted
+# Scripted directives (no API key)
+npm run smoke-directives
+
+# Live AI Gateway crew turn
+npm run smoke-directives -- --live "Have mule draft a one-line README blurb"
+```
+
+### Single adapter turn (Phase 1)
+
+```bash
 npm run smoke-turn -- "Say hello from the yard"
 ```
 
@@ -46,11 +56,23 @@ npm run smoke-turn -- "Say hello from the yard"
 | --- | --- |
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway key (preferred for local) |
 | `VERCEL_OIDC_TOKEN` | Alternative when linked to a Vercel project |
+| `YARDDOG_WORKDIR` | Hosted harness workdir (default: cwd) |
+| `YARDDOG_AUTO_APPROVE_TOOLS` | Set `0`/`false` to require approval on heavy tools |
 | `YARDDOG_FAST_POOL` / `YARDDOG_HIGH_POOL` | Optional comma-separated Gateway model ids |
-| `YARDDOG_FAST_MODEL` / `YARDDOG_HIGH_MODEL` | Optional preferred model per lane |
+
+## Layout
+
+| Path | Role |
+| --- | --- |
+| `agent/` | Eve foreman + instructions |
+| `agent/tools/yarddog_send.ts` | Full hosted crew job (Phase 2) |
+| `agent/tools/yarddog_gateway_turn.ts` | Single AiSdkAdapter turn (Phase 1) |
+| `agent/subagents/*` | Crew slots (wrecker / spotter / mule) |
+| `../src/core/hosted-harness.ts` | HostedYardDog — directives/tools/memory |
+| `../src/model/` | YardDog-owned AI SDK adapter / lanes |
 
 ## Out of scope (later phases)
 
-- Full crew / `@delegate` / `@consult` / `@escalate` on Eve
 - Cursor Cloud `@delegate` tool
 - Removing ModelHitch from the Bun CLI harness
+- Full MCP / hiring-hall parity on Eve
