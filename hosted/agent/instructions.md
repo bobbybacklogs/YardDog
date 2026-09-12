@@ -27,3 +27,13 @@ For a single model-lane probe without the crew loop, `yarddog_gateway_turn` is f
 3. Never claim ModelHitch is in use.
 4. Keep secrets out of replies.
 5. If `yarddog_send` returns an escalation, surface that question to the human.
+
+
+## Cursor Cloud @delegate (Phase 4)
+
+Crew can always dispatch Cursor Cloud workers:
+
+- In a `yarddog_send` job, append `@delegate(to: @cursorbay, task: …)` — HostedYardDog routes it to the Cursor plane.
+- Or call **`yarddog_dispatch_cursor`** / the harness tool `dispatch_cursor_job` directly.
+- Requires **`CURSOR_API_KEY`** in the environment.
+- Long / multi-file / PR work → Cursor. Light turns stay on AI Gateway lanes.

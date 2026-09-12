@@ -44,6 +44,18 @@ One persistent **crew** of teammate-style agents (Grok-Bot-shaped, not workflow-
 
 Edit `.yarddog/agents.json` to adjust prompts, memory, or add crew members. Provider and model routing is never stored on agents; every turn follows AI Gateway lanes's configuration in `~/.ai-gateway/config.json` (or `$AI_GATEWAY_API_KEY/config.json`).
 
+## Cursor Cloud @delegate
+
+Any crew member (and hired temps) can dispatch Cursor Cloud agents:
+
+```text
+@delegate(to: @cursorbay, task: fix auth and open a PR)
+```
+
+Or call the always-on tool `dispatch_cursor_job`. Status/cancel via `cursor_job_status` / `cancel_cursor_job`.
+
+Requires `CURSOR_API_KEY`. Prefer Cursor for multi-file / PR / long jobs; light turns stay on AI Gateway lanes.
+
 ## The hiring hall
 
 Your local agent directories are a labor pool. YardDog discovers agent definitions across every supported ecosystem (via [portage-cli](https://www.npmjs.com/package/portage-cli)) and hires them as **temps** — session-scoped workers that house agents treat exactly like teammates.

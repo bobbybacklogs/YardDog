@@ -11,7 +11,14 @@ import { EventEmitter } from "node:events";
 import { parseReply } from "./directives";
 import { buildSystemPrompt, historyToMessages } from "./prompts";
 import { Store, type HarnessConfig } from "./store";
-import { TOOLS, needsApproval, type ToolContext } from "./tools";
+import { TOOLS, needsApproval, CURSOR_TOOL_NAMES, type ToolContext } from "./tools";
+import {
+  CURSOR_BAY_TAG,
+  CursorPlane,
+  isCursorDelegateTag,
+  type CursorPlaneEvent,
+  type CursorPlaneOptions,
+} from "../cursor";
 import { defaultCrew } from "./crew";
 import { applyMemory } from "./memory";
 import { Computer } from "../workspace/computer";
@@ -44,15 +51,26 @@ export interface HostedYardDogOptions {
   config?: Partial<HarnessConfig>;
   /** Inject the model turn (unit tests). */
   runModelTurn?: HostedModelTurn;
+  /** Cursor Cloud @delegate plane (tests may inject a mock). */
+  cursorPlane?: CursorPlane;
+  /** Options used when constructing the default CursorPlane. */
+  cursor?: CursorPlaneOptions;
 }
 
 export type HostedModelTurn = ModelTurn;
+
+function withCursorTools(names: string[]): string[] {
+  const set = new Set(names);
+  for (const n of CURSOR_TOOL_NAMES) set.add(n);
+  return [...set];
+}
 
 const MAX_CONSULTS_PER_JOB = 4;
 
 export class HostedYardDog extends EventEmitter {
   readonly store: Store;
   readonly adapter: AiSdkAdapter;
+  readonly cursorPlane: CursorPlane;
   config: HarnessConfig;
 
   private crew: AgentDef[] = [];
@@ -70,12 +88,14 @@ export class HostedYardDog extends EventEmitter {
     config: HarnessConfig,
     adapter: AiSdkAdapter,
     runModelTurn: HostedModelTurn,
+    cursorPlane: CursorPlane,
   ) {
     super();
     this.store = store;
     this.config = config;
     this.adapter = adapter;
     this.runModelTurn = runModelTurn;
+    this.cursorPlane = cursorPlane;
   }
 
   static async create(options: HostedYardDogOptions = {}): Promise<HostedYardDog> {
@@ -89,8 +109,9 @@ export class HostedYardDog extends EventEmitter {
 
     const adapter = options.adapter ?? new AiSdkAdapter();
     const runModelTurn = options.runModelTurn ?? defaultModelTurn(adapter);
+    const cursorPlane = options.cursorPlane ?? new CursorPlane(options.cursor);
 
-    const dog = new HostedYardDog(store, config, adapter, runModelTurn);
+    const dog = new HostedYardDog(store, config, adapter, runModelTurn, cursorPlane);
     const existingCrew = await store.loadCrew();
     dog.crew = existingCrew ?? defaultCrew();
     if (!existingCrew) await store.saveCrew(dog.crew);
@@ -248,13 +269,15 @@ export class HostedYardDog extends EventEmitter {
         ? await this.computerFor(agent.tag)
         : undefined,
       remember: (mode, note) => this.writeMemory(agent, mode, note),
+          cursorPlane: this.cursorPlane,
+      onCursorEvent: (ev) => this.forwardCursorEvent(threadId, agent.tag, ev),
     };
 
     try {
       const result = await this.runModelTurn({
         agent,
         messages,
-        toolNames: agent.tools.filter((n) => Boolean(TOOLS[n])),
+        toolNames: withCursorTools(agent.tools.filter((n) => Boolean(TOOLS[n]))),
         executeTool: (name, args) => this.executeTool(agent, name, args, ctx),
         maxTurns: agent.maxTurns ?? 8,
         onDelta: (delta) => {
@@ -346,7 +369,18 @@ export class HostedYardDog extends EventEmitter {
     if (parsed.handoffs.length > 0 && depth < this.config.maxDepth) {
       this.setPresence(agent.tag, "handoff");
 
-      const valid = parsed.handoffs
+      const cursorHandoffs = parsed.handoffs.filter((h) => isCursorDelegateTag(h.to));
+      const crewHandoffs = parsed.handoffs.filter((h) => !isCursorDelegateTag(h.to));
+
+      if (cursorHandoffs.length > 0) {
+        await Promise.all(
+          cursorHandoffs.map((h) =>
+            this.runCursorDelegate(agent.tag, h.task, threadId, depth),
+          ),
+        );
+      }
+
+      const valid = crewHandoffs
         .map((h) => ({ h, next: this.agent(h.to) }))
         .filter(
           (x): x is { h: Handoff; next: AgentDef } =>
@@ -463,6 +497,111 @@ export class HostedYardDog extends EventEmitter {
     if (!agent.temp) await this.store.saveCrew(this.crew);
     return mode === "replace" ? "memory replaced" : "remembered";
   }
+
+  
+  private forwardCursorEvent(
+    threadId: string,
+    agentTag: string,
+    event: CursorPlaneEvent,
+  ): void {
+    if (event.kind === "delta" && event.text) {
+      this.emitEvent({ type: "delta", threadId, agentTag: event.job.tag, text: event.text });
+    } else if (event.kind === "tool") {
+      this.emitEvent({
+        type: "tool",
+        threadId,
+        agentTag: event.job.tag,
+        name: event.toolName ?? "cursor_tool",
+        args: event.toolArgs ?? {},
+      });
+    } else if (event.kind === "error") {
+      this.emitEvent({
+        type: "error",
+        threadId,
+        agentTag: event.job.tag,
+        error: event.text ?? event.job.error ?? "Cursor job failed",
+      });
+    }
+    // Keep bay/job visible on the presence board while running.
+    if (event.job.status === "running" || event.job.status === "queued") {
+      this.setPresence(event.job.tag, "working");
+    } else if (event.job.status === "finished") {
+      this.setPresence(event.job.tag, "idle");
+    } else if (event.job.status === "error" || event.job.status === "cancelled") {
+      this.setPresence(event.job.tag, "error");
+    }
+  }
+
+  private async runCursorDelegate(
+    fromTag: string,
+    task: string,
+    threadId: string,
+    depth: number,
+  ): Promise<void> {
+    const thread = this.threads.get(threadId);
+    if (!thread) return;
+    if (!this.cursorPlane.ready) {
+      const detail =
+        "Cursor @delegate failed: set CURSOR_API_KEY (or CURSOR_API_KEY) to dispatch Cloud agents";
+      this.emitEvent({ type: "error", threadId, agentTag: fromTag, error: detail });
+      thread.messages.push({
+        id: randomUUID(),
+        from: CURSOR_BAY_TAG,
+        text: `⚠ ${detail}`,
+        ts: Date.now(),
+        depth: depth + 1,
+      });
+      await this.store.saveThread(thread);
+      return;
+    }
+
+    this.setPresence(CURSOR_BAY_TAG, "working");
+    this.emitEvent({
+      type: "handoff",
+      threadId,
+      handoff: { from: fromTag, to: CURSOR_BAY_TAG, task },
+    });
+
+    try {
+      const job = await this.cursorPlane.dispatch(
+        { task, tag: CURSOR_BAY_TAG, wait: true },
+        (ev) => this.forwardCursorEvent(threadId, fromTag, ev),
+      );
+      const summary =
+        job.status === "finished"
+          ? (job.text?.trim() || "(Cursor job finished with no text)")
+          : `⚠ Cursor job ${job.status}${job.error ? `: ${job.error}` : ""}`;
+      const message = {
+        id: randomUUID(),
+        from: job.tag,
+        text: summary,
+        ts: Date.now(),
+        depth: depth + 1,
+        meta: {
+          servedModel: "cursor-cloud",
+          servedProvider: "cursor",
+        },
+      };
+      thread.messages.push(message);
+      thread.updatedAt = Date.now();
+      await this.store.saveThread(thread);
+      this.emitEvent({ type: "turn:end", threadId, message });
+      this.setPresence(job.tag, job.status === "finished" ? "idle" : "error");
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      this.setPresence(CURSOR_BAY_TAG, "error");
+      this.emitEvent({ type: "error", threadId, agentTag: CURSOR_BAY_TAG, error: detail });
+      thread.messages.push({
+        id: randomUUID(),
+        from: CURSOR_BAY_TAG,
+        text: `⚠ ${detail}`,
+        ts: Date.now(),
+        depth: depth + 1,
+      });
+      await this.store.saveThread(thread);
+    }
+  }
+
 
   private emitEvent(event: YardDogEvent): void {
     this.emit("event", event);

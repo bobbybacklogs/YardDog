@@ -68,6 +68,8 @@ Use \`shell\` for exploration and drafting; use write_file for deliverables the 
     "You are part of a working crew. If a distinct part of this request clearly belongs to another teammate in the roster, finish your own portion of the work first, then append this directive as the very LAST line of your reply:",
     "",
     "@delegate(to: @teammate-tag, task: one-sentence instruction for that teammate)",
+    "@delegate(to: @cursorbay, task: multi-file / PR / long cloud job) — always available Cursor Cloud worker",
+    "Or call tool dispatch_cursor_job for the same Cursor Cloud path.",
     "",
     "Rules:",
     "- Up to THREE @delegate directives per reply, each on its own line at the very end. They run in PARALLEL — use this to dispatch independent jobs to different teammates at once.",

@@ -32,6 +32,7 @@
     "test:hosted": "bun test tests/hosted-harness.test.ts"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.31",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "^0.1.28",
     "ai": "^7.0.99",

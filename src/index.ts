@@ -61,3 +61,19 @@ export type {
   TurnChunk,
   TurnUsage,
 } from "./model";
+
+// ── Cursor @delegate plane (Phase 4) ──────────────────────────────
+export {
+  CURSOR_BAY_TAG,
+  CursorPlane,
+  isCursorDelegateTag,
+} from "./cursor";
+export type {
+  CreateCursorAgent,
+  CursorDispatchRequest,
+  CursorJob,
+  CursorJobStatus,
+  CursorPlaneEvent,
+  CursorPlaneOptions,
+  CursorRepoRef,
+} from "./cursor";

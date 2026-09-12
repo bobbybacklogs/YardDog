@@ -14,7 +14,7 @@ ModelHitch is **not** on the hosted happy path.
 ## Prerequisites
 
 - **Node.js 24+** (Eve requirement)
-- Vercel AI Gateway auth: `AI_GATEWAY_API_KEY` **or** linked project OIDC (`vercel link` + `vercel env pull`)
+- Vercel AI Gateway auth: `AI_GATEWAY_API_KEY` / `CURSOR_API_KEY` **or** linked project OIDC (`vercel link` + `vercel env pull`)
 
 ```bash
 # from repo root
@@ -67,12 +67,13 @@ npm run smoke-turn -- "Say hello from the yard"
 | `agent/` | Eve foreman + instructions |
 | `agent/tools/yarddog_send.ts` | Full hosted crew job (Phase 2) |
 | `agent/tools/yarddog_gateway_turn.ts` | Single AiSdkAdapter turn (Phase 1) |
+| `agent/tools/yarddog_dispatch_cursor.ts` | Cursor Cloud `@delegate` (`@cursorbay`) (Phase 4) |
 | `agent/subagents/*` | Crew slots (wrecker / spotter / mule) |
 | `../src/core/hosted-harness.ts` | HostedYardDog — directives/tools/memory |
 | `../src/model/` | YardDog-owned AI SDK adapter / lanes |
 
 ## Out of scope (later phases)
 
-- Cursor Cloud `@delegate` tool
+- Cursor Cloud `@delegate` tool (**done** — `@cursorbay` / `dispatch_cursor_job` / `yarddog_dispatch_cursor`)
 - ModelHitch removed from the Bun CLI harness (Phase 3 complete)
 - Full MCP / hiring-hall parity on Eve
