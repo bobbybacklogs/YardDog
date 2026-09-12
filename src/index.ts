@@ -77,3 +77,27 @@ export type {
   CursorPlaneOptions,
   CursorRepoRef,
 } from "./cursor";
+
+// ── client plane (Phase 5 — Eve HTTP client + local fallback) ─────
+export {
+  describeYardTarget,
+  EveClient,
+  EveClientError,
+  extractAssistantText,
+  openYard,
+  readEveUrlFromEnv,
+  readModeFromEnv,
+  resolveClientTarget,
+  type EveAskResult,
+  type EveClientOptions,
+  type EveHealth,
+  type EveStreamEvent,
+  type OpenYardOptions,
+  type ResolvedClientTarget,
+  type ResolvedYardClientMode,
+  type YardAskResult,
+  type YardClientMode,
+  type YardClientModeOptions,
+  type YardRuntime,
+  type YardRuntimeKind,
+} from "./client";

@@ -18,7 +18,17 @@ npm run smoke-directives          # scripted directive smoke (no key)
 npm run smoke-turn -- "hi"        # one AiSdkAdapter turn
 ```
 
-See [`hosted/README.md`](./hosted/README.md). Bun CLI/OpenTUI use the same AI Gateway model plane as the hosted Eve app.
+See [`hosted/README.md`](./hosted/README.md) and **[`docs/run-paths.md`](./docs/run-paths.md)** (Phase 5 — local adapter vs Eve client).
+
+```bash
+# Bun CLI as Eve client (after hosted `npm run dev`)
+export YARDDOG_EVE_URL=http://127.0.0.1:2000
+bun run src/cli.ts status
+bun run src/cli.ts ask "Have the yard draft a one-line README blurb"
+
+# Force local adapter
+bun run src/cli.ts ask "…" --local
+```
 
 ## TL;DR
 <p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/infograph.png" width=600 height=400>
