@@ -10,6 +10,10 @@
     ".": {
       "import": "./src/index.ts",
       "types": "./src/index.ts"
+    },
+    "./model": {
+      "import": "./src/model/index.ts",
+      "types": "./src/model/index.ts"
     }
   },
   "bin": {
@@ -19,12 +23,16 @@
     "start": "bun run src/cli.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
+    "test:model": "bun test tests/model",
     "build": "bun build src/cli.ts --compile --outfile bin/yarddog",
-    "install:global": "bun run build && bun link"
+    "install:global": "bun run build && bun link",
+    "hosted:dev": "npm --prefix hosted run dev",
+    "hosted:smoke": "npm --prefix hosted run smoke-turn"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "^0.1.28",
+    "ai": "^7.0.99",
     "just-bash": "^3.4.2",
     "modelhitch": "^0.15.0",
     "portage-cli": "^0.1.4",

@@ -4,6 +4,21 @@
 
 YardDog is a multi-agent orchestration harness built directly on top of [ModelHitch](https://www.npmjs.com/package/modelhitch). Built for the unglamorous grunt work, it shuttles context, wrangles code, and hauls documentation across models like a terminal spotter truck moving freight. No bloated enterprise fluff — just raw, mechanical muscle to hitch up tasks and keep your agent fleet in gear.
 
+## Hosted runtime (Phase 1 — Eve + AI SDK)
+
+Preferred deploy plane is the Eve app under [`hosted/`](./hosted). Model turns go through **Vercel AI Gateway** via YardDog-owned `src/model` (`AiSdkAdapter` + `lanes.ts`) — **not ModelHitch**.
+
+```bash
+# Node.js 24+ required for Eve
+cd hosted
+cp .env.example .env.local   # set AI_GATEWAY_API_KEY
+npm install
+npm run dev                  # Eve interactive session (Gateway model)
+npm run smoke-turn -- "hi"   # one AiSdkAdapter turn (no Eve TUI)
+```
+
+See [`hosted/README.md`](./hosted/README.md). Bun CLI/OpenTUI still use ModelHitch today; later phases cut that over.
+
 ## TL;DR
 <p align="center"><img src="https://github.com/bobbybacklogs/YardDog/blob/main/assets/infograph.png" width=600 height=400>
 

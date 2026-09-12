@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node", "eve/agent-modules"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "#yarddog-model": ["../src/model/index.ts"],
+      "#yarddog-model/*": ["../src/model/*"]
+    }
+  },
+  "include": ["agent/**/*.ts", "scripts/**/*.ts"]
+}
