@@ -61,6 +61,7 @@ npm run smoke-turn -- "Say hello from the yard"
 | `YARDDOG_WORKDIR` | Hosted harness workdir (default: cwd) |
 | `YARDDOG_AUTO_APPROVE_TOOLS` | Set `0`/`false` to require approval on heavy tools |
 | `YARDDOG_FAST_POOL` / `YARDDOG_HIGH_POOL` | Optional comma-separated Gateway model ids |
+| `CURSOR_API_KEY` | Cursor Cloud `@delegate` (`yarddog_dispatch_cursor`) |
 
 ## Layout
 
