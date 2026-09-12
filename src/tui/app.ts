@@ -47,9 +47,45 @@ const PRESENCE_COLOR: Record<string, string> = {
   error: "#FF5E5E",
 };
 
-export async function runTui(opts: { hires?: string[]; skills?: string[] } = {}): Promise<void> {
-  // Imported lazily so headless commands don't pay the harness cost.
+export async function runTui(opts: {
+  hires?: string[];
+  skills?: string[];
+  forceLocal?: boolean;
+  forceEve?: boolean;
+  eveUrl?: string;
+} = {}): Promise<void> {
+  // Lazy import so headless commands skip the harness cost.
   const { YardDog } = await import("../core/harness");
+  const { describeYardTarget, openYard } = await import("../client");
+
+  const clientTarget = describeYardTarget({
+    forceLocal: opts.forceLocal,
+    forceEve: opts.forceEve,
+    eveUrl: opts.eveUrl,
+  });
+
+  type EveRuntime = Awaited<ReturnType<typeof openYard>>;
+  let eveRuntime: EveRuntime | undefined;
+  if (clientTarget.mode === "eve") {
+    try {
+      eveRuntime = await openYard({
+        forceEve: true,
+        eveUrl: clientTarget.eveUrl,
+        fallbackToLocal: false,
+        log: (line) => console.error(`yarddog: ${line}`),
+      });
+      console.error(`yarddog: TUI Eve client @ ${eveRuntime.eveUrl}`);
+    } catch (err) {
+      if (!clientTarget.allowLocalFallback) throw err;
+      console.error(
+        `yarddog: Eve unavailable (${(err as Error).message}) — TUI local adapter`,
+      );
+      eveRuntime = undefined;
+    }
+  } else {
+    console.error(`yarddog: TUI local adapter (${clientTarget.reason})`);
+  }
+
   const dog = await YardDog.create();
   for (const name of opts.hires ?? []) {
     try {
@@ -106,7 +142,7 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
     height: 1,
   });
   rootCol.add(headerRow);
-  const headerTitle = new TextRenderable(renderer, { content: "YARDDOG", fg: "#FFD75E" });
+  const headerTitle = new TextRenderable(renderer, { content: eveRuntime ? "YARDDOG · eve" : "YARDDOG · local", fg: "#FFD75E" });
   const headerThread = new TextRenderable(renderer, { content: "", fg: "#888888" });
   const headerSkills = new TextRenderable(renderer, { content: "", fg: "#B78AFF" });
   headerRow.add(headerTitle);
@@ -359,6 +395,15 @@ export async function runTui(opts: { hires?: string[]; skills?: string[] } = {})
       return;
     }
     try {
+      if (eveRuntime) {
+        updateStatus("eve…");
+        const result = await eveRuntime.ask(text, { skills: skillNames });
+        feedLine(`you: ${text}`, "#5EFF8B");
+        feedLine(result.text || "(empty Eve reply)", "#c8c8c8");
+        if (result.sessionId) updateStatus(`eve ${result.sessionId}`);
+        else updateStatus("idle");
+        return;
+      }
       await dog.send(thread.id, text, { skills: skillNames });
     } catch (err) {
       feedLine(`✗ ${(err as Error).message}`, "#FF5E5E");

@@ -7,7 +7,9 @@ Eve-hosted YardDog runtime — **preferred deploy plane**.
 | Phase | Status | What |
 | --- | --- | --- |
 | 1 | Done | Eve scaffold + YardDog-owned `AiSdkAdapter` / lanes + one Gateway turn |
-| 2 | This PR | Hosted harness: crew, `@delegate` / `@consult` / `@escalate`, tools, approval, memory |
+| 2 | Done | Hosted harness: crew, `@delegate` / `@consult` / `@escalate`, tools, approval, memory |
+| 3–4 | Done | Cut ModelHitch; Cursor `@delegate` plane |
+| 5 | This PR | Bun CLI/OpenTUI as Eve client (+ local fallback); see repo `docs/run-paths.md` |
 
 ModelHitch is **not** on the hosted happy path.
 

@@ -1,5 +1,10 @@
 #!/usr/bin/env bun
 import { YardDog } from "./core/harness";
+import {
+  describeYardTarget,
+  openYard,
+  type OpenYardOptions,
+} from "./client";
 
 /**
  * yarddog — entry point.
@@ -22,6 +27,7 @@ Usage:
   yarddog threads        List saved threads
   yarddog serve          HTTP + SSE surface for the yard (localhost only)
   yarddog mcp            Connect configured MCP servers and list their tools
+  yarddog status         Show resolved client mode (local vs Eve)
 
 Flags:
   --workdir <path>       Operate on a project directory (default: cwd)
@@ -29,6 +35,12 @@ Flags:
   --hire <name,...>      Hire temps (from local agent directories) for this run
   --skill <name,...>     Attach library skills to the job (see: yarddog skills)
   --port <n>             Port for serve (default 4343 or $YARDDOG_PORT)
+  --local                Force local adapter (ignore YARDDOG_EVE_URL)
+  --eve [url]            Force Eve client (URL optional if YARDDOG_EVE_URL is set)
+
+Client mode (Phase 5):
+  Default is auto — Eve when YARDDOG_EVE_URL is set and healthy, else local.
+  See docs/run-paths.md for local + hosted run paths.
 
 Getting the command:
   Not yet published to npm — \`npx yarddog\` will 404 until it is.
@@ -46,6 +58,9 @@ interface CliArgs {
   hires: string[];
   skills: string[];
   port?: number;
+  forceLocal: boolean;
+  forceEve: boolean;
+  eveUrl?: string;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -55,8 +70,10 @@ function parseArgs(argv: string[]): CliArgs {
     autoApprove: false,
     hires: [],
     skills: [],
+    forceLocal: false,
+    forceEve: false,
   };
-  const COMMANDS = new Set(["tui", "ask", "crew", "threads", "temps", "hire", "fire", "skills", "serve", "mcp"]);
+  const COMMANDS = new Set(["tui", "ask", "status", "crew", "threads", "temps", "hire", "fire", "skills", "serve", "mcp"]);
   const rest = [...argv];
   let sawCommand = false;
   while (rest.length > 0) {
@@ -67,6 +84,15 @@ function parseArgs(argv: string[]): CliArgs {
       args.autoApprove = true;
     } else if (arg === "--port") {
       args.port = Number(rest.shift());
+    } else if (arg === "--local") {
+      args.forceLocal = true;
+    } else if (arg === "--eve") {
+      args.forceEve = true;
+      const next = rest[0];
+      if (next && !next.startsWith("-") && !COMMANDS.has(next)) {
+        args.eveUrl = next;
+        rest.shift();
+      }
     } else if (arg === "--hire") {
       // Comma-separated list: --hire a,b,c (repeatable)
       const next = rest[0];
@@ -117,10 +143,62 @@ async function hireRequested(
   }
 }
 
+
+function clientOptionsFromArgs(args: CliArgs): OpenYardOptions {
+  return {
+    workdir: args.workdir,
+    forceLocal: args.forceLocal,
+    forceEve: args.forceEve,
+    eveUrl: args.eveUrl,
+    log: (line) => console.error(`yarddog: ${line}`),
+  };
+}
+
+async function runAskEve(args: CliArgs, job: string): Promise<void> {
+  if (args.hires.length > 0) {
+    console.error("yarddog: --hire is local-only; ignoring temps in Eve client mode");
+  }
+  const runtime = await openYard({
+    ...clientOptionsFromArgs(args),
+    forceEve: true,
+    fallbackToLocal: false,
+  });
+  try {
+    console.error(`yarddog: Eve client @ ${runtime.eveUrl} (${runtime.reason})`);
+    const result = await runtime.ask(job, { skills: args.skills });
+    if (result.text) process.stdout.write(result.text);
+    if (!result.text.endsWith("\n")) console.log("");
+    if (result.sessionId) console.error(`yarddog: session ${result.sessionId}`);
+  } finally {
+    await runtime.close();
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.command === "help") usage();
+
+  if (args.command === "status") {
+    const target = describeYardTarget(clientOptionsFromArgs(args));
+    console.log(`mode:     ${target.mode}`);
+    console.log(`reason:   ${target.reason}`);
+    if (target.eveUrl) console.log(`eve:      ${target.eveUrl}`);
+    console.log(
+      `fallback: ${target.allowLocalFallback ? "local adapter if Eve unhealthy" : "none"}`,
+    );
+    if (target.mode === "eve" && target.eveUrl) {
+      const { EveClient } = await import("./client/eve");
+      const eve = new EveClient({
+        host: target.eveUrl,
+        bearer: process.env.YARDDOG_EVE_TOKEN ?? process.env.EVE_TOKEN,
+      });
+      const ready = await eve.isReady();
+      console.log(`health:   ${ready ? "ready" : "unreachable"}`);
+    }
+    return;
+  }
+
 
   if (args.command === "temps") {
     const { discoverTemps } = await import("./core/hall");
@@ -229,6 +307,25 @@ async function main(): Promise<void> {
       console.error('Give the dog a job: yarddog ask "audit the repo and fix broken imports"');
       process.exit(1);
     }
+
+    const target = describeYardTarget(clientOptionsFromArgs(args));
+    let useLocal = target.mode === "local";
+    if (target.mode === "eve") {
+      try {
+        await runAskEve(args, job);
+        return;
+      } catch (err) {
+        if (!target.allowLocalFallback) throw err;
+        console.error(
+          `yarddog: Eve failed (${(err as Error).message}) — falling back to local`,
+        );
+        useLocal = true;
+      }
+    }
+
+    if (!useLocal) return;
+
+    console.error(`yarddog: local adapter (${target.reason})`);
     const dog = await YardDog.create({ workdir: args.workdir });
     dog.config.autoApproveTools = args.autoApprove;
     await hireRequested(dog, args.hires);
@@ -237,7 +334,7 @@ async function main(): Promise<void> {
       switch (event.type) {
         case "turn:start":
           console.log(`\n▸ @${event.agentTag} picks it up`);
-          break;;
+          break;
         case "delta":
           process.stdout.write(event.text);
           break;
@@ -261,10 +358,8 @@ async function main(): Promise<void> {
       }
     });
 
-    // In headless mode the human is watching; heavy tools are approved via flag only.
     dog.approveTool = async (_tag, name) => {
       if (args.autoApprove) return true;
-      // Safe read-only tools pass; anything heavy gets declined with a hint.
       return ["read_file", "list_files", "grep"].includes(name);
     };
 
@@ -276,7 +371,13 @@ async function main(): Promise<void> {
 
   if (args.command === "tui") {
     const { runTui } = await import("./tui/app");
-    await runTui({ hires: args.hires, skills: args.skills });
+    await runTui({
+      hires: args.hires,
+      skills: args.skills,
+      forceLocal: args.forceLocal,
+      forceEve: args.forceEve,
+      eveUrl: args.eveUrl,
+    });
     return;
   }
 
