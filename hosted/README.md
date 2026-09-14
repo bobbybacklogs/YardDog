@@ -61,6 +61,7 @@ npm run smoke-turn -- "Say hello from the yard"
 | `YARDDOG_WORKDIR` | Hosted harness workdir (default: cwd) |
 | `YARDDOG_AUTO_APPROVE_TOOLS` | Set `0`/`false` to require approval on heavy tools |
 | `YARDDOG_FAST_POOL` / `YARDDOG_HIGH_POOL` | Optional comma-separated Gateway model ids |
+| `CURSOR_API_KEY` | Cursor Cloud `@delegate` (`yarddog_dispatch_cursor`) |
 
 ## Layout
 
@@ -79,3 +80,8 @@ npm run smoke-turn -- "Say hello from the yard"
 - Cursor Cloud `@delegate` tool (**done** — `@cursorbay` / `dispatch_cursor_job` / `yarddog_dispatch_cursor`)
 - ModelHitch removed from the Bun CLI harness (Phase 3 complete)
 - Full MCP / hiring-hall parity on Eve
+
+
+## Vercel notes
+
+`hosted/vercel.json` installs shared packages into the **repo-root** `node_modules` as well as `hosted/`, because Eve resolves `../src` imports from the parent tree. `defineAgent({ build.externalDependencies })` keeps `@cursor/sdk` / `just-bash` / `ai` (and `@mongodb-js/zstd`) external so Nitro does not try to bundle native addons.
