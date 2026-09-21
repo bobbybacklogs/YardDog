@@ -85,7 +85,7 @@ Runs the full Bun harness in-process: crew, directives, tools, MCP, hiring hall,
 | `shell` computer: private home + read-only `/project` | **Proven** | `tests/computer.test.ts` |
 | MCP floor connects, prefixes tools, invokes fixture | **Proven** | `tests/mcp.test.ts` |
 | Hiring hall maps vendor tools; drops unknowns; ignores vendor models | **Proven** | `tests/hall.test.ts` (mapping only — not a live `portage` scan of this machine) |
-| Skill library injects + stages companions | **Proven** | `tests/library.test.ts` (uses real skillswap skills when present) |
+| Skill library injects + stages companions | **Gap** (env) | `tests/library.test.ts` calls `prepareSkills(["firebase-crashlytics", …])` via skillswap. Unknown-skill + empty-request cases **Proven**. The two “real skill” cases fail when those names are not installed on the machine (this checkout: 2 fail). Do not stub them to green verify |
 | AiSdkAdapter streams + failsover on restriction errors (injected `streamText`) | **Proven** | `tests/model/ai-sdk-adapter.test.ts`, `tests/model/lanes.test.ts` |
 | Live local `ask` / TUI turn through AI Gateway | **Unverified** | Needs `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`. TUI launch-stays-alive is **Proven** (`tests/tui-smoke.test.ts`) with a dummy key — it does not complete a model turn |
 | `yarddog serve` HTTP + SSE floor | **Code-inspected** | `src/serve.ts`; no HTTP test |
@@ -98,7 +98,7 @@ Preferred deploy plane. Eve tools: `yarddog_send` (crew job), `yarddog_gateway_t
 | Claim | Grade | Evidence |
 | --- | --- | --- |
 | `HostedYardDog` runs crew + directives + tools + approval + memory without ModelHitch | **Proven** | `tests/hosted-harness.test.ts`; `src/core/hosted-harness.ts` does not import ModelHitch |
-| Scripted hosted directive smoke (no API key) | **Proven** | `hosted/scripts/smoke-directives.ts` (default path; `bun run hosted:directives`) |
+| Scripted hosted directive smoke (no API key) | **Proven** | `hosted/scripts/smoke-directives.ts` → `{ ok: true, live: false, via: "scripted" }`. Default prompt `@mention`s `@mule`, so mention routing can skip `@foreman` (observed: 1 turn / 2 messages). Delegate/consult/escalate execution remains **Proven** in `tests/hosted-harness.test.ts` |
 | Eve tool `yarddog_send` wraps `HostedYardDog.send` | **Code-inspected** | `hosted/agent/tools/yarddog_send.ts` |
 | Eve tool `yarddog_gateway_turn` is one `AiSdkAdapter` turn | **Code-inspected** | `hosted/agent/tools/yarddog_gateway_turn.ts` |
 | Hosted Eve session (`cd hosted && npm run dev`) actually calls those tools | **Unverified** | Prompt-only (`hosted/agent/instructions.md`). No test that Eve invokes `yarddog_send` |
@@ -136,6 +136,7 @@ These are documentation bugs, not missing features to implement in this bootstra
 | README Requirements: `OPENCODE_API_KEY` / `mock/mock-model` | Happy path is `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` + `AiSdkAdapter`. No mock-model provider in `src/model` | **Gap** |
 | README A2A: “max one delegate per reply” | Code + prompts: up to three | **Gap** |
 | `hosted/README.md` Phase 5 “This PR” | Phase 5 is already on `main` (`docs/run-paths.md`) | **Gap** (stale status line) |
+| Hosted Eve `npm run dev` / Eve package | `hosted/package.json` `engines.node: >=24`; this agent ran Node 22 (`EBADENGINE`). Scripted `smoke-directives` still ran | **Unverified** for live Eve on Node 22 |
 
 ---
 
@@ -159,3 +160,16 @@ VERIFY_LIVE=1 bun run verify
 ```
 
 Requires `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`.
+
+## 6. Command proof (this bootstrap)
+
+Recorded on the gardener PR checkout. Not a live Gateway run.
+
+| Step | Result |
+| --- | --- |
+| `bun run typecheck` | pass |
+| `bun test` | **106 pass / 2 fail / 108** — failures are `prepareSkills` real-skill cases (`firebase-crashlytics`, `firebase-hosting-basics` not on this machine) |
+| `bun run hosted:directives` | pass — `{ "ok": true, "live": false, "via": "scripted", "modelHitch": false, "turns": 1, "messages": 2 }` |
+| `VERIFY_LIVE=1` / `hosted:smoke` | **not run** — no `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` |
+
+`bun run verify` is therefore **red** until those skillswap names exist (or the tests become hermetic). That is a documented Gap, not a reason to change harness behavior.

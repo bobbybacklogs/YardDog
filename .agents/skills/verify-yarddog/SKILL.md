@@ -33,8 +33,17 @@ bun run verify
 3. `bun run hosted:directives` — `hosted/scripts/smoke-directives.ts` with a
    **scripted** `runModelTurn` (no Eve TUI, no API key)
 
-Expect `hosted:directives` to print `@foreman` then `@mule` and JSON
+Expect `hosted:directives` JSON
 `{ "ok": true, "live": false, "via": "scripted", "modelHitch": false }`.
+The default smoke prompt contains `@mule`, so mention routing may skip
+`@foreman` and only record the mule reply. That is still a no-key
+`HostedYardDog.send` proof. Parallel/consult/escalate stay in
+`tests/hosted-harness.test.ts`.
+
+`bun test` is **not hermetic**. `tests/library.test.ts` looks up
+`firebase-crashlytics` / `firebase-hosting-basics` via skillswap on the
+machine. If those skills are absent, two tests fail. Leave them red —
+do not add product fixtures or skip them to green `verify`.
 
 `tests/tui-smoke.test.ts` may set a dummy `AI_GATEWAY_API_KEY=test-key` so the
 TUI process starts. That is not a live Gateway turn.
@@ -44,7 +53,8 @@ TUI process starts. That is not a live Gateway turn.
 - Typecheck of the Bun/CLI tree
 - Parser + **HostedYardDog** directive loop (delegate / consult / escalate)
 - Client mode resolution and mock Eve HTTP
-- Local tools / computer / MCP fixture / hall mapping / skills staging
+- Local tools / computer / MCP fixture / hall mapping
+- Unknown-skill / empty `prepareSkills` (real-skill staging only if skillswap finds those names)
 - Scripted hosted directive smoke
 
 ### What this does not prove
