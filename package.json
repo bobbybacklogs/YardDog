@@ -29,7 +29,8 @@
     "hosted:dev": "npm --prefix hosted run dev",
     "hosted:smoke": "npm --prefix hosted run smoke-turn",
     "hosted:directives": "npm --prefix hosted run smoke-directives",
-    "test:hosted": "bun test tests/hosted-harness.test.ts"
+    "test:hosted": "bun test tests/hosted-harness.test.ts",
+    "verify": "bash scripts/verify.sh"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.31",
